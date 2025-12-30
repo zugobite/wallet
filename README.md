@@ -314,6 +314,19 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - Update documentation as needed
 - Keep commits atomic and well-described
 
+## Disclaimer
+
+This project is created **purely for educational and portfolio demonstration purposes** to showcase my knowledge of financial transaction systems and software architecture.
+
+**Important notices:**
+
+- It implements **industry-standard patterns** documented in publicly available resources including:
+  - Stripe's API design guidelines
+  - Martin Fowler's enterprise architecture patterns
+  - PCI-DSS compliance frameworks
+  - RFC standards (JWT, HMAC, etc.)
+- This is **not intended for production use** without proper security audits, compliance reviews, and regulatory approvals
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
