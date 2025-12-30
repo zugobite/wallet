@@ -75,7 +75,10 @@ curl http://localhost:3000/health
 
 | Method | Endpoint                         | Description                        |
 | ------ | -------------------------------- | ---------------------------------- |
-| `GET`  | `/health`                        | Service health check (no auth)     |
+| `GET`  | `/health`                        | Detailed health check (no auth)    |
+| `GET`  | `/health/live`                   | Liveness probe (Kubernetes)        |
+| `GET`  | `/health/ready`                  | Readiness probe (Kubernetes)       |
+| `GET`  | `/metrics`                       | Prometheus metrics (no auth)       |
 | `GET`  | `/api/v1`                        | API information (no auth)          |
 | `POST` | `/api/v1/transactions/authorize` | Create pending debit authorization |
 | `POST` | `/api/v1/transactions/debit`     | Complete authorized transaction    |
@@ -205,10 +208,15 @@ wallet/
 │   ├── middleware/          # Express middleware
 │   │   ├── auth.mjs
 │   │   ├── idempotency.mjs
-│   │   └── signature.mjs
+│   │   ├── signature.mjs
+│   │   ├── requestLogger.mjs  # Request logging
+│   │   └── healthCheck.mjs    # Health probes
 │   ├── infra/               # Infrastructure
 │   │   ├── prisma.mjs
 │   │   ├── redis.mjs
+│   │   ├── logger.mjs         # Structured logging
+│   │   ├── metrics.mjs        # Prometheus metrics
+│   │   ├── alerting.mjs       # Alert system
 │   │   └── repositories/
 │   └── utils/
 │       └── canonicalJson.mjs
@@ -232,6 +240,7 @@ Comprehensive documentation is available in the `/docs` directory:
 | [005-DATABASE_SCHEMA.md](docs/005-DATABASE_SCHEMA.md)   | Data model documentation          |
 | [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                     |
 | [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions           |
+| [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting       |
 
 ## Testing
 
