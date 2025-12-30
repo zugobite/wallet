@@ -1,0 +1,24 @@
+# CODEOWNERS - Define who owns what parts of the codebase
+# These owners will be automatically requested for review on PRs
+
+# Default owners for everything in the repo
+* @zugobite
+
+# Core application code
+/src/ @zugobite
+
+# Database schema and migrations
+/prisma/ @zugobite
+
+# Infrastructure and deployment
+/.github/ @zugobite
+
+# Documentation
+/docs/ @zugobite
+README.md @zugobite
+CONTRIBUTING.md @zugobite
+
+# Security-sensitive files
+/src/middleware/auth.mjs @zugobite
+/src/middleware/signature.mjs @zugobite
+# Example: @username or @org/team-name
