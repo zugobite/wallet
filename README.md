@@ -241,6 +241,7 @@ Comprehensive documentation is available in the `/docs` directory:
 | [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                     |
 | [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions           |
 | [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting       |
+| [009-SCALING.md](docs/009-SCALING.md)                   | Scaling to 100M+ transactions     |
 
 ## Testing
 
