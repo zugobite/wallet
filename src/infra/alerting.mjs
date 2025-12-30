@@ -8,22 +8,22 @@ import logger from "./logger.mjs";
 // Alert state tracking (to prevent alert flooding)
 const alertState = new Map();
 
-// Default alert configuration
+// Default alert configuration (uses environment variables with fallbacks)
 const defaultConfig = {
   // Error rate threshold (errors per minute)
-  errorRateThreshold: 10,
+  errorRateThreshold: parseInt(process.env.ALERT_ERROR_RATE_THRESHOLD || "10", 10),
 
   // High latency threshold (ms)
-  latencyThreshold: 5000,
+  latencyThreshold: parseInt(process.env.ALERT_LATENCY_THRESHOLD || "5000", 10),
 
   // Failed auth threshold (failures per minute)
-  authFailureThreshold: 20,
+  authFailureThreshold: parseInt(process.env.ALERT_AUTH_FAILURE_THRESHOLD || "20", 10),
 
   // Alert cooldown period (ms) - prevent duplicate alerts
-  cooldownPeriod: 300000, // 5 minutes
+  cooldownPeriod: parseInt(process.env.ALERT_COOLDOWN_MS || "300000", 10),
 
   // Channels to send alerts to
-  channels: ["log"], // Options: "log", "webhook", "email"
+  channels: (process.env.ALERT_CHANNELS || "log").split(","),
 
   // Webhook URL for external alerting (e.g., Slack, PagerDuty)
   webhookUrl: process.env.ALERT_WEBHOOK_URL,
