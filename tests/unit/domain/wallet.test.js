@@ -15,9 +15,9 @@ describe("Wallet Domain", () => {
       const wallet = {
         id: "wallet-1",
         balance: 1000,
-        account: { status: "frozen" },
+        account: { status: "FROZEN" },
       };
-      expect(() => assertWalletActive(wallet)).toThrow("Wallet frozen");
+      expect(() => assertWalletActive(wallet)).toThrow("Account is frozen");
     });
 
     it("should not throw for active wallet", () => {
@@ -41,12 +41,12 @@ describe("Wallet Domain", () => {
   describe("canDebit", () => {
     it("should throw error for zero amount", () => {
       const wallet = { balance: 1000 };
-      expect(() => canDebit(wallet, 0)).toThrow("Invalid amount");
+      expect(() => canDebit(wallet, 0)).toThrow("Amount must be positive");
     });
 
     it("should throw error for negative amount", () => {
       const wallet = { balance: 1000 };
-      expect(() => canDebit(wallet, -100)).toThrow("Invalid amount");
+      expect(() => canDebit(wallet, -100)).toThrow("Amount must be positive");
     });
 
     it("should throw error for insufficient balance", () => {

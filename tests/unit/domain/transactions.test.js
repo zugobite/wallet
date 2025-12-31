@@ -18,14 +18,14 @@ describe("Transaction Domain", () => {
     it("should throw error if transaction status is completed", () => {
       const txn = { id: "txn-1", status: "completed" };
       expect(() => assertTransactionPending(txn)).toThrow(
-        "Transaction not pending"
+        "Transaction is not pending"
       );
     });
 
     it("should throw error if transaction status is reversed", () => {
       const txn = { id: "txn-1", status: "reversed" };
       expect(() => assertTransactionPending(txn)).toThrow(
-        "Transaction not pending"
+        "Transaction is not pending"
       );
     });
 
