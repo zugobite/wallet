@@ -1,6 +1,6 @@
 # Wallet Transaction API
 
-A secure, production-ready wallet transaction API with two-phase debit authorization, HMAC request signing, and comprehensive replay protection.
+A secure, production-ready wallet transaction API with user authentication, two-phase debit authorization, HMAC request signing, and comprehensive admin controls.
 
 [![Node.js](https://img.shields.io/badge/Node.js-20.x-green.svg)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-4.x-blue.svg)](https://expressjs.com/)
@@ -10,10 +10,13 @@ A secure, production-ready wallet transaction API with two-phase debit authoriza
 
 ## Features
 
+- **User Registration & Authentication** - Complete auth flow with JWT tokens
+- **Role-Based Access Control (RBAC)** - Customer and Admin roles
+- **Customer Wallet APIs** - Deposit, withdraw, view balance and transactions
+- **Admin Controls** - Freeze wallets, reverse transactions, platform oversight
 - **Two-Phase Debit Authorization** - Authorize → Debit/Reverse pattern for safe fund holds
 - **HMAC-SHA256 Request Signing** - Cryptographic request integrity verification
 - **Replay Protection** - Nonce-based protection against duplicate requests
-- **JWT Authentication** - Secure token-based authentication
 - **Idempotent Operations** - Safe retry handling with referenceId tracking
 - **Full Audit Trail** - Complete ledger with balance snapshots
 - **Serverless Ready** - AWS Lambda compatible via serverless-http
@@ -22,8 +25,8 @@ A secure, production-ready wallet transaction API with two-phase debit authoriza
 
 - [Quick Start](#-quick-start)
 - [API Endpoints](#-api-endpoints)
+- [cURL Examples](#-curl-examples)
 - [Authentication](#-authentication)
-- [Request Signing](#-request-signing)
 - [Transaction Flow](#-transaction-flow)
 - [Project Structure](#-project-structure)
 - [Documentation](#-documentation)
@@ -73,52 +76,182 @@ curl http://localhost:3000/health
 
 ## API Endpoints
 
-| Method | Endpoint                         | Description                        |
-| ------ | -------------------------------- | ---------------------------------- |
-| `GET`  | `/health`                        | Detailed health check (no auth)    |
-| `GET`  | `/health/live`                   | Liveness probe (Kubernetes)        |
-| `GET`  | `/health/ready`                  | Readiness probe (Kubernetes)       |
-| `GET`  | `/metrics`                       | Prometheus metrics (no auth)       |
-| `GET`  | `/api/v1`                        | API information (no auth)          |
-| `POST` | `/api/v1/transactions/authorize` | Create pending debit authorization |
-| `POST` | `/api/v1/transactions/debit`     | Complete authorized transaction    |
-| `POST` | `/api/v1/transactions/credit`    | Direct credit to wallet            |
-| `POST` | `/api/v1/transactions/reverse`   | Reverse pending authorization      |
+### Public Endpoints
 
-### Example Request
+| Method | Endpoint       | Description                 |
+| ------ | -------------- | --------------------------- |
+| `GET`  | `/health`      | Health check (no auth)      |
+| `GET`  | `/health/live` | Liveness probe (Kubernetes) |
+| `GET`  | `/health/ready`| Readiness probe (Kubernetes)|
+| `GET`  | `/api/v1`      | API information (no auth)   |
+
+### Authentication Endpoints
+
+| Method | Endpoint               | Description            |
+| ------ | ---------------------- | ---------------------- |
+| `POST` | `/api/v1/auth/register`| Register new user      |
+| `POST` | `/api/v1/auth/login`   | Login and get token    |
+| `GET`  | `/api/v1/auth/me`      | Get current user       |
+
+### Customer Wallet Endpoints
+
+| Method | Endpoint                           | Description              |
+| ------ | ---------------------------------- | ------------------------ |
+| `GET`  | `/api/v1/wallets/:id`              | Get wallet details       |
+| `GET`  | `/api/v1/wallets/:id/balance`      | Get wallet balance       |
+| `GET`  | `/api/v1/wallets/:id/transactions` | Get transaction history  |
+| `POST` | `/api/v1/wallets/:id/deposit`      | Deposit funds            |
+| `POST` | `/api/v1/wallets/:id/withdraw`     | Withdraw funds           |
+
+### Transaction Endpoints
+
+| Method | Endpoint                         | Description                   |
+| ------ | -------------------------------- | ----------------------------- |
+| `POST` | `/api/v1/transactions/authorize` | Create pending authorization  |
+| `POST` | `/api/v1/transactions/debit`     | Complete debit transaction    |
+| `POST` | `/api/v1/transactions/credit`    | Direct credit to wallet       |
+| `POST` | `/api/v1/transactions/reverse`   | Reverse pending authorization |
+
+### Admin Endpoints (ADMIN role required)
+
+| Method | Endpoint                               | Description              |
+| ------ | -------------------------------------- | ------------------------ |
+| `GET`  | `/api/v1/admin/users`                  | List all users           |
+| `GET`  | `/api/v1/admin/wallets`                | List all wallets         |
+| `GET`  | `/api/v1/admin/transactions`           | List all transactions    |
+| `POST` | `/api/v1/admin/wallets/:id/freeze`     | Freeze a wallet          |
+| `POST` | `/api/v1/admin/wallets/:id/unfreeze`   | Unfreeze a wallet        |
+| `POST` | `/api/v1/admin/transactions/:id/reverse` | Admin reverse transaction |
+
+## cURL Examples
+
+### Register a New Account
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/transactions/authorize \
+curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <jwt_token>" \
-  -H "X-Signature: <hmac_signature>" \
-  -H "X-Signature-Version: v1" \
-  -H "X-Timestamp: <epoch_ms>" \
-  -H "X-Nonce: <unique_uuid>" \
   -d '{
-    "walletId": "wallet-uuid",
-    "amount": 1000,
-    "referenceId": "order-12345"
+    "email": "demo@example.com",
+    "password": "SecurePassword123!"
   }'
 ```
 
-### Response Format
+### Login
 
-All endpoints return consistent JSON responses:
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "demo@example.com",
+    "password": "SecurePassword123!"
+  }'
+```
 
-```json
-{
-  "status": 201,
-  "code": "CREATED",
-  "data": {
-    "transactionId": "txn-uuid",
-    "status": "PENDING",
-    "amount": 1000
-  }
-}
+### Check Wallet Balance
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/wallets/YOUR_WALLET_ID/balance" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Deposit Funds
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/wallets/YOUR_WALLET_ID/deposit" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "amount": 10000,
+    "referenceId": "deposit-001"
+  }'
+```
+
+### Withdraw Funds
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/wallets/YOUR_WALLET_ID/withdraw" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "amount": 2500,
+    "referenceId": "withdraw-001"
+  }'
+```
+
+### View Transaction History
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/wallets/YOUR_WALLET_ID/transactions" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Complete Customer Flow
+
+```bash
+# 1. Register
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "SecurePass123!"}'
+
+# Save from response:
+export TOKEN="your-jwt-token"
+export WALLET_ID="your-wallet-id"
+
+# 2. Deposit funds
+curl -X POST "http://localhost:3000/api/v1/wallets/$WALLET_ID/deposit" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"amount": 10000, "referenceId": "deposit-001"}'
+
+# 3. Check balance
+curl -X GET "http://localhost:3000/api/v1/wallets/$WALLET_ID/balance" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. Withdraw
+curl -X POST "http://localhost:3000/api/v1/wallets/$WALLET_ID/withdraw" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"amount": 2500, "referenceId": "withdraw-001"}'
+
+# 5. View history
+curl -X GET "http://localhost:3000/api/v1/wallets/$WALLET_ID/transactions" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Admin Operations
+
+```bash
+# Login as admin
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "AdminPass123!"}'
+
+export ADMIN_TOKEN="admin-jwt-token"
+
+# List all users
+curl -X GET "http://localhost:3000/api/v1/admin/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# List all wallets
+curl -X GET "http://localhost:3000/api/v1/admin/wallets" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Freeze a suspicious wallet
+curl -X POST "http://localhost:3000/api/v1/admin/wallets/WALLET_ID/freeze" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"reason": "Suspicious activity"}'
+
+# Reverse a fraudulent transaction
+curl -X POST "http://localhost:3000/api/v1/admin/transactions/TXN_ID/reverse" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"reason": "Customer refund"}'
 ```
 
 ## Authentication
+
+### JWT Token
 
 The API uses JWT (JSON Web Token) authentication. Include the token in the `Authorization` header:
 
@@ -126,41 +259,16 @@ The API uses JWT (JSON Web Token) authentication. Include the token in the `Auth
 Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
 ```
 
-The JWT payload must include:
+### User Roles
 
-- `sub` - User ID that maps to an account
+| Role     | Description            | Access                               |
+| -------- | ---------------------- | ------------------------------------ |
+| CUSTOMER | Regular user           | Own wallets and transactions only    |
+| ADMIN    | Platform administrator | All users, wallets, and transactions |
 
-## Request Signing
+### Request Signing (Optional)
 
-All transaction endpoints require HMAC-SHA256 request signing for integrity verification.
-
-### Required Headers
-
-| Header                | Description                      |
-| --------------------- | -------------------------------- |
-| `X-Signature`         | HMAC-SHA256 signature (hex)      |
-| `X-Signature-Version` | Always `v1`                      |
-| `X-Timestamp`         | Request timestamp (epoch ms)     |
-| `X-Nonce`             | Unique request identifier (UUID) |
-
-### Signature Generation
-
-```javascript
-const crypto = require("crypto");
-
-const payload = [
-  "POST", // HTTP method
-  "/api/v1/transactions/authorize", // URL path
-  timestamp, // X-Timestamp value
-  nonce, // X-Nonce value
-  JSON.stringify(sortedBody), // Canonicalized request body
-].join("|");
-
-const signature = crypto
-  .createHmac("sha256", REQUEST_SIGNING_SECRET)
-  .update(payload)
-  .digest("hex");
-```
+For high-security environments, requests can be signed using HMAC-SHA256. See [Authentication docs](docs/004-AUTHENTICATION.md) for details.
 
 ## Transaction Flow
 
@@ -186,9 +294,10 @@ const signature = crypto
 2. **Debit** - Complete the transaction and deduct funds
 3. **Reverse** - Cancel the authorization and release hold
 
-### Direct Credit
+### Direct Operations
 
-Credits are applied immediately without the two-phase flow.
+- **Deposit** - Credits are applied immediately
+- **Withdraw** - Debits are applied immediately
 
 ## Project Structure
 
@@ -201,28 +310,36 @@ wallet/
 │   │   ├── wallet.mjs
 │   │   └── transactions.mjs
 │   ├── handlers/            # Request handlers
+│   │   ├── auth/            # Register, login, me
+│   │   ├── wallets/         # Wallet operations
+│   │   ├── admin/           # Admin operations
 │   │   ├── authorize.mjs
 │   │   ├── debit.mjs
 │   │   ├── credit.mjs
 │   │   └── reverse.mjs
+│   ├── services/            # Service layer
+│   │   ├── auth.service.mjs
+│   │   ├── wallet.service.mjs
+│   │   └── transaction.service.mjs
 │   ├── middleware/          # Express middleware
 │   │   ├── auth.mjs
+│   │   ├── rbac.mjs         # Role-based access control
 │   │   ├── idempotency.mjs
 │   │   ├── signature.mjs
-│   │   ├── requestLogger.mjs  # Request logging
-│   │   └── healthCheck.mjs    # Health probes
+│   │   ├── requestLogger.mjs
+│   │   └── healthCheck.mjs
 │   ├── infra/               # Infrastructure
 │   │   ├── prisma.mjs
 │   │   ├── redis.mjs
-│   │   ├── logger.mjs         # Structured logging
-│   │   ├── metrics.mjs        # Prometheus metrics
-│   │   ├── alerting.mjs       # Alert system
+│   │   ├── logger.mjs
+│   │   ├── metrics.mjs
+│   │   ├── alerting.mjs
 │   │   └── repositories/
 │   └── utils/
 │       └── canonicalJson.mjs
 ├── prisma/
 │   └── schema.prisma        # Database schema
-├── tests/                   # Test suite
+├── tests/                   # Test suite (201 tests)
 ├── docs/                    # Documentation
 └── package.json
 ```
@@ -231,22 +348,22 @@ wallet/
 
 Comprehensive documentation is available in the `/docs` directory:
 
-| Document                                                | Description                       |
-| ------------------------------------------------------- | --------------------------------- |
-| [001-PROJECT_OVERVIEW.md](docs/001-PROJECT_OVERVIEW.md) | Architecture and design decisions |
-| [002-GETTING_STARTED.md](docs/002-GETTING_STARTED.md)   | Setup and configuration guide     |
-| [003-API_REFERENCE.md](docs/003-API_REFERENCE.md)       | Complete API documentation        |
-| [004-AUTHENTICATION.md](docs/004-AUTHENTICATION.md)     | Auth and signing details          |
-| [005-DATABASE_SCHEMA.md](docs/005-DATABASE_SCHEMA.md)   | Data model documentation          |
-| [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                     |
-| [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions           |
-| [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting       |
-| [009-SCALING.md](docs/009-SCALING.md)                   | Scaling to 100M+ transactions     |
+| Document                                                | Description                          |
+| ------------------------------------------------------- | ------------------------------------ |
+| [001-PROJECT_OVERVIEW.md](docs/001-PROJECT_OVERVIEW.md) | Architecture and design decisions    |
+| [002-GETTING_STARTED.md](docs/002-GETTING_STARTED.md)   | Setup, configuration, and quick start|
+| [003-API_REFERENCE.md](docs/003-API_REFERENCE.md)       | Complete API docs with cURL examples |
+| [004-AUTHENTICATION.md](docs/004-AUTHENTICATION.md)     | Auth, RBAC, and signing details      |
+| [005-DATABASE_SCHEMA.md](docs/005-DATABASE_SCHEMA.md)   | Data model documentation             |
+| [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                        |
+| [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions              |
+| [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting          |
+| [009-SCALING.md](docs/009-SCALING.md)                   | Scaling to 100M+ transactions        |
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (201 tests)
 npm test
 
 # Run unit tests only
@@ -264,7 +381,7 @@ npm run test:coverage
 
 ### Test Structure
 
-- **Unit Tests** - Domain logic, middleware, utilities
+- **Unit Tests** - Domain logic, middleware, services, repositories
 - **E2E Tests** - Health endpoint, API flow verification
 
 ## Development
