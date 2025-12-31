@@ -1,6 +1,9 @@
 import express from "express";
 import serverless from "serverless-http";
 import routes from "./routes.mjs";
+import authRoutes from "./routes/auth.routes.mjs";
+import walletRoutes from "./routes/wallet.routes.mjs";
+import adminRoutes from "./routes/admin.routes.mjs";
 import logger from "./infra/logger.mjs";
 import { collectMetrics } from "./infra/metrics.mjs";
 import { requestLogger, errorLogger } from "./middleware/requestLogger.mjs";
@@ -51,12 +54,34 @@ app.get("/api/v1", (req, res) => {
     code: "OK",
     data: {
       version: "1.0.0",
-      endpoints: [
-        "POST /api/v1/transactions/authorize",
-        "POST /api/v1/transactions/debit",
-        "POST /api/v1/transactions/credit",
-        "POST /api/v1/transactions/reverse",
-      ],
+      endpoints: {
+        auth: [
+          "POST /api/v1/auth/register",
+          "POST /api/v1/auth/login",
+          "GET /api/v1/auth/me",
+        ],
+        wallets: [
+          "GET /api/v1/wallets/:id",
+          "GET /api/v1/wallets/:id/balance",
+          "GET /api/v1/wallets/:id/transactions",
+          "POST /api/v1/wallets/:id/deposit",
+          "POST /api/v1/wallets/:id/withdraw",
+        ],
+        admin: [
+          "GET /api/v1/admin/users",
+          "GET /api/v1/admin/wallets",
+          "GET /api/v1/admin/transactions",
+          "POST /api/v1/admin/wallets/:id/freeze",
+          "POST /api/v1/admin/wallets/:id/unfreeze",
+          "POST /api/v1/admin/transactions/:id/reverse",
+        ],
+        transactions: [
+          "POST /api/v1/transactions/authorize",
+          "POST /api/v1/transactions/debit",
+          "POST /api/v1/transactions/credit",
+          "POST /api/v1/transactions/reverse",
+        ],
+      },
       monitoring: [
         "GET /health",
         "GET /health/live",
@@ -66,6 +91,15 @@ app.get("/api/v1", (req, res) => {
     },
   });
 });
+
+// Mount auth routes under /api/v1/auth
+app.use("/api/v1/auth", authRoutes);
+
+// Mount wallet routes under /api/v1/wallets
+app.use("/api/v1/wallets", walletRoutes);
+
+// Mount admin routes under /api/v1/admin
+app.use("/api/v1/admin", adminRoutes);
 
 // Mount transaction routes under /api/v1/transactions
 app.use("/api/v1/transactions", routes);
