@@ -2,9 +2,12 @@
 
 ## Overview
 
-The Wallet Service uses a relational database model with four core entities:
+The Wallet Service uses a relational database model with five core entities following Laravel-style separated migrations:
 
 ```
+User (1) ──────────── (1) Account
+                            │
+                            │
 Account (1) ─────────── (N) Wallet
                               │
                               │
@@ -20,11 +23,24 @@ Transaction (1) ─────── (N) LedgerEntry
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
+│                                   User                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ id           │ String   │ UUID      │ Primary Key                           │
+│ email        │ String   │ UNIQUE    │ User email address                    │
+│ passwordHash │ String   │           │ Bcrypt hashed password                │
+│ role         │ Role     │           │ CUSTOMER or ADMIN                     │
+│ createdAt    │ DateTime │           │ Creation timestamp                    │
+│ updatedAt    │ DateTime │           │ Last update timestamp                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ 1:1
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
 │                                  Account                                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ id          │ String    │ UUID      │ Primary Key                           │
-│ userId      │ String    │           │ External user identifier              │
-│ status      │ String    │           │ Account status (active, frozen, etc.) │
+│ userId      │ String    │ UNIQUE    │ Foreign Key → User                    │
+│ status      │ String    │ ACTIVE    │ Account status (ACTIVE, FROZEN)       │
 │ createdAt   │ DateTime  │           │ Creation timestamp                    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
@@ -48,9 +64,9 @@ Transaction (1) ─────── (N) LedgerEntry
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ id          │ String    │ UUID      │ Primary Key                           │
 │ walletId    │ String    │ UUID      │ Foreign Key → Wallet                  │
-│ type        │ String    │           │ authorize, debit, credit              │
+│ type        │ String    │           │ DEPOSIT, WITHDRAW, REVERSAL           │
 │ amount      │ Int       │           │ Transaction amount (in cents)         │
-│ status      │ String    │           │ pending, completed, reversed          │
+│ status      │ String    │           │ PENDING, COMPLETED, REVERSED          │
 │ referenceId │ String    │ UNIQUE    │ Idempotency key                       │
 │ createdAt   │ DateTime  │           │ Creation timestamp                    │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -62,7 +78,7 @@ Transaction (1) ─────── (N) LedgerEntry
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ id            │ String  │ UUID      │ Primary Key                           │
 │ transactionId │ String  │ UUID      │ Foreign Key → Transaction             │
-│ direction     │ String  │           │ debit, credit                         │
+│ direction     │ String  │           │ DEBIT, CREDIT                         │
 │ amount        │ Int     │           │ Entry amount (in cents)               │
 │ balanceBefore │ Int     │           │ Balance before transaction            │
 │ balanceAfter  │ Int     │           │ Balance after transaction             │
@@ -84,10 +100,26 @@ datasource db {
   provider = "mysql"
 }
 
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  account      Account?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Account {
   id        String   @id @default(uuid())
-  userId    String
-  status    String
+  userId    String   @unique
+  status    String   @default("ACTIVE")
+  user      User     @relation(fields: [userId], references: [id])
   wallets   Wallet[]
   createdAt DateTime @default(now())
 }
@@ -131,14 +163,25 @@ model LedgerEntry {
 
 ## Field Descriptions
 
+### User
+
+| Field        | Type     | Description                     |
+| ------------ | -------- | ------------------------------- |
+| id           | UUID     | Unique identifier               |
+| email        | String   | User email (unique)             |
+| passwordHash | String   | Bcrypt hashed password          |
+| role         | Role     | `CUSTOMER` or `ADMIN`           |
+| createdAt    | DateTime | When the user was created       |
+| updatedAt    | DateTime | When the user was last updated  |
+
 ### Account
 
-| Field     | Type     | Description                            |
-| --------- | -------- | -------------------------------------- |
-| id        | UUID     | Unique identifier                      |
-| userId    | String   | External user ID from your auth system |
-| status    | String   | `active`, `frozen`, `closed`           |
-| createdAt | DateTime | When the account was created           |
+| Field     | Type     | Description                   |
+| --------- | -------- | ----------------------------- |
+| id        | UUID     | Unique identifier             |
+| userId    | UUID     | Reference to User (unique)    |
+| status    | String   | `ACTIVE` or `FROZEN`          |
+| createdAt | DateTime | When the account was created  |
 
 ### Wallet
 
@@ -153,15 +196,15 @@ model LedgerEntry {
 
 ### Transaction
 
-| Field       | Type     | Description                        |
-| ----------- | -------- | ---------------------------------- |
-| id          | UUID     | Unique identifier                  |
-| walletId    | UUID     | Target wallet reference            |
-| type        | String   | `authorize`, `debit`, `credit`     |
-| amount      | Int      | Amount in smallest currency unit   |
-| status      | String   | `pending`, `completed`, `reversed` |
-| referenceId | String   | Unique idempotency key             |
-| createdAt   | DateTime | When the transaction was created   |
+| Field       | Type     | Description                           |
+| ----------- | -------- | ------------------------------------- |
+| id          | UUID     | Unique identifier                     |
+| walletId    | UUID     | Target wallet reference               |
+| type        | String   | `DEPOSIT`, `WITHDRAW`, `REVERSAL`     |
+| amount      | Int      | Amount in smallest currency unit      |
+| status      | String   | `PENDING`, `COMPLETED`, `REVERSED`    |
+| referenceId | String   | Unique idempotency key                |
+| createdAt   | DateTime | When the transaction was created      |
 
 ### LedgerEntry
 
@@ -169,11 +212,68 @@ model LedgerEntry {
 | ------------- | -------- | -------------------------------- |
 | id            | UUID     | Unique identifier                |
 | transactionId | UUID     | Parent transaction reference     |
-| direction     | String   | `debit` or `credit`              |
+| direction     | String   | `DEBIT` or `CREDIT`              |
 | amount        | Int      | Entry amount                     |
 | balanceBefore | Int      | Wallet balance before this entry |
 | balanceAfter  | Int      | Wallet balance after this entry  |
 | createdAt     | DateTime | When the entry was created       |
+
+---
+
+## Migrations (Laravel-Style)
+
+Following Laravel conventions, each table has its own migration file for better organization and maintainability:
+
+```
+prisma/migrations/
+├── migration_lock.toml
+├── 20251230000001_create_users_table/
+│   └── migration.sql
+├── 20251230000002_create_accounts_table/
+│   └── migration.sql
+├── 20251230000003_create_wallets_table/
+│   └── migration.sql
+├── 20251230000004_create_transactions_table/
+│   └── migration.sql
+└── 20251230000005_create_ledger_entries_table/
+    └── migration.sql
+```
+
+### Migration Order
+
+| Order | Migration                     | Description                          |
+| ----- | ----------------------------- | ------------------------------------ |
+| 1     | `create_users_table`          | User model with auth fields          |
+| 2     | `create_accounts_table`       | Account linked to User               |
+| 3     | `create_wallets_table`        | Wallet linked to Account             |
+| 4     | `create_transactions_table`   | Transaction linked to Wallet         |
+| 5     | `create_ledger_entries_table` | LedgerEntry linked to Transaction    |
+
+### Migration Commands
+
+View migration history:
+
+```bash
+npx prisma migrate status
+```
+
+Create a new migration:
+
+```bash
+npx prisma migrate dev --name create_table_name
+```
+
+Apply pending migrations:
+
+```bash
+npx prisma migrate deploy
+```
+
+Reset database (⚠️ deletes all data):
+
+```bash
+npx prisma migrate reset
+```
 
 ---
 
@@ -209,25 +309,14 @@ This provides a complete audit trail for compliance and debugging.
 
 ---
 
-## Migrations
+## Role-Based Access Control
 
-View migration history:
+The `Role` enum defines user permissions:
 
-```bash
-npx prisma migrate status
-```
-
-Create a new migration:
-
-```bash
-npx prisma migrate dev --name description_of_change
-```
-
-Reset database (⚠️ deletes all data):
-
-```bash
-npx prisma migrate reset
-```
+| Role     | Description                                    |
+| -------- | ---------------------------------------------- |
+| CUSTOMER | Can access own wallet operations               |
+| ADMIN    | Can access all users, wallets, and admin APIs  |
 
 ---
 
