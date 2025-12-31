@@ -16,20 +16,38 @@ export default async function auth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    // Load user/account from DB
-    const account = await prisma.account.findUnique({
-      where: { userId: payload.sub },
+    
+    // Load user with account from DB
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: {
+        account: true,
+      },
     });
 
-    if (!account) {
+    if (!user) {
       return res.status(401).json({
         status: 401,
         code: "UNAUTHORIZED",
-        error: "Account not found",
+        error: "User not found",
       });
     }
 
-    req.user = { id: payload.sub, account };
+    // Check if account is frozen
+    if (user.account?.status === "FROZEN") {
+      return res.status(403).json({
+        status: 403,
+        code: "ACCOUNT_FROZEN",
+        error: "Account is frozen",
+      });
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      account: user.account,
+    };
     next();
   } catch (err) {
     return res.status(401).json({
