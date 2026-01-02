@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
-import { Money, getCurrency } from "monetra";
+import { money } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
 import { logger } from "../../infra/logger.mjs";
 
@@ -62,9 +62,9 @@ export default async function reverseTransaction(req, res) {
       const wallet = transaction.wallet;
 
       // Calculate new balance based on original transaction type
-      const currency = getCurrency(wallet.currency || "USD");
-      const balanceM = Money.fromMinor(wallet.balance, currency);
-      const amountM = Money.fromMinor(transaction.amount, currency);
+      const currency = wallet.currency || "USD";
+      const balanceM = money(wallet.balance, currency);
+      const amountM = money(transaction.amount, currency);
 
       let newBalanceM;
       let reversalType;
@@ -91,7 +91,7 @@ export default async function reverseTransaction(req, res) {
         throw err;
       }
 
-      const newBalance = Number(newBalanceM.toMinor());
+      const newBalance = Number(newBalanceM.minor);
 
       // Update original transaction status
       await tx.transaction.update({

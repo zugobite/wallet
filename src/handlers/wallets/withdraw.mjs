@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
-import { Money, getCurrency } from "monetra";
+import { money } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
 import { logger } from "../../infra/logger.mjs";
 
@@ -71,9 +71,9 @@ export default async function withdraw(req, res) {
       }
 
       // Check sufficient balance
-      const currency = getCurrency(wallet.currency || "USD");
-      const balanceM = Money.fromMinor(wallet.balance, currency);
-      const amountM = Money.fromMinor(amount, currency);
+      const currency = wallet.currency || "USD";
+      const balanceM = money(wallet.balance, currency);
+      const amountM = money(amount, currency);
 
       if (balanceM.lessThan(amountM)) {
         const err = new Error("Insufficient funds");
@@ -83,7 +83,7 @@ export default async function withdraw(req, res) {
       }
 
       const newBalanceM = balanceM.subtract(amountM);
-      const newBalance = Number(newBalanceM.toMinor());
+      const newBalance = Number(newBalanceM.minor);
 
       // Debit the wallet with optimistic locking
       const updatedWallet = await tx.wallet.update({

@@ -1,4 +1,4 @@
-import { Money, getCurrency } from "monetra";
+import { money, assertNonNegative } from "monetra";
 
 /**
  * Domain error with code and status
@@ -32,9 +32,8 @@ export function assertWalletActive(wallet) {
  * @throws {DomainError} If amount is invalid or insufficient funds
  */
 export function canDebit(wallet, amount) {
-  const currency = getCurrency(wallet.currency);
-  const amountMoney = Money.fromMinor(amount, currency);
-  const balanceMoney = Money.fromMinor(wallet.balance, currency);
+  const amountMoney = money(amount, wallet.currency);
+  const balanceMoney = money(wallet.balance, wallet.currency);
 
   if (amountMoney.isNegative() || amountMoney.isZero()) {
     throw new DomainError(
@@ -59,8 +58,7 @@ export function canDebit(wallet, amount) {
  * @throws {DomainError} If amount is invalid
  */
 export function canCredit(amount, currencyCode = "USD") {
-  const currency = getCurrency(currencyCode);
-  const amountMoney = Money.fromMinor(amount, currency);
+  const amountMoney = money(amount, currencyCode);
 
   if (amountMoney.isNegative() || amountMoney.isZero()) {
     throw new DomainError(

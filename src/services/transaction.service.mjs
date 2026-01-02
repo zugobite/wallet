@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { Money, getCurrency } from "monetra";
+import { money } from "monetra";
 import { prisma } from "../infra/prisma.mjs";
 import * as walletRepo from "../infra/repositories/wallet.repo.mjs";
 import * as txRepo from "../infra/repositories/transactions.repo.mjs";
@@ -101,11 +101,11 @@ export async function debit({ walletId, accountId, amount, referenceId }) {
     }
 
     // Debit the wallet
-    const currency = getCurrency(wallet.currency || "USD");
-    const balanceM = Money.fromMinor(wallet.balance, currency);
-    const amountM = Money.fromMinor(amount, currency);
+    const currency = wallet.currency || "USD";
+    const balanceM = money(wallet.balance, currency);
+    const amountM = money(amount, currency);
     const newBalanceM = balanceM.subtract(amountM);
-    const newBalance = Number(newBalanceM.toMinor());
+    const newBalance = Number(newBalanceM.minor);
 
     const updatedWallet = await walletRepo.updateWalletBalance(
       tx,
@@ -171,11 +171,11 @@ export async function credit({ walletId, accountId, amount, referenceId }) {
     }
 
     // Credit the wallet
-    const currency = getCurrency(wallet.currency || "USD");
-    const balanceM = Money.fromMinor(wallet.balance, currency);
-    const amountM = Money.fromMinor(amount, currency);
+    const currency = wallet.currency || "USD";
+    const balanceM = money(wallet.balance, currency);
+    const amountM = money(amount, currency);
     const newBalanceM = balanceM.add(amountM);
-    const newBalance = Number(newBalanceM.toMinor());
+    const newBalance = Number(newBalanceM.minor);
 
     const updatedWallet = await walletRepo.updateWalletBalance(
       tx,
