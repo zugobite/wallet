@@ -40,27 +40,27 @@ describe("Wallet Domain", () => {
 
   describe("canDebit", () => {
     it("should throw error for zero amount", () => {
-      const wallet = { balance: 1000 };
+      const wallet = { balance: 1000, currency: "USD" };
       expect(() => canDebit(wallet, 0)).toThrow("Amount must be positive");
     });
 
     it("should throw error for negative amount", () => {
-      const wallet = { balance: 1000 };
+      const wallet = { balance: 1000, currency: "USD" };
       expect(() => canDebit(wallet, -100)).toThrow("Amount must be positive");
     });
 
     it("should throw error for insufficient balance", () => {
-      const wallet = { balance: 500 };
+      const wallet = { balance: 500, currency: "USD" };
       expect(() => canDebit(wallet, 1000)).toThrow("Insufficient funds");
     });
 
     it("should not throw for valid debit", () => {
-      const wallet = { balance: 1000 };
+      const wallet = { balance: 1000, currency: "USD" };
       expect(() => canDebit(wallet, 500)).not.toThrow();
     });
 
     it("should not throw when amount equals balance", () => {
-      const wallet = { balance: 1000 };
+      const wallet = { balance: 1000, currency: "USD" };
       expect(() => canDebit(wallet, 1000)).not.toThrow();
     });
   });

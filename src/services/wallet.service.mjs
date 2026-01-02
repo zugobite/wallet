@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { money } from "monetra";
 import { prisma } from "../infra/prisma.mjs";
 import * as walletRepo from "../infra/repositories/wallet.repo.mjs";
 import * as txRepo from "../infra/repositories/transactions.repo.mjs";
@@ -85,11 +86,15 @@ export async function deposit({ walletId, accountId, amount, referenceId }) {
     }
 
     // Credit the wallet
-    const updatedWallet = await walletRepo.creditWallet(
+    const balanceM = money(wallet.balance, wallet.currency);
+    const amountM = money(amount, wallet.currency);
+    const newBalanceM = balanceM.add(amountM);
+    const newBalance = Number(newBalanceM.minor);
+
+    const updatedWallet = await walletRepo.updateWalletBalance(
       tx,
-      walletId,
-      wallet.balance,
-      amount
+      wallet,
+      newBalance
     );
 
     // Create transaction record
@@ -155,7 +160,16 @@ export async function withdraw({ walletId, accountId, amount, referenceId }) {
     canDebit(wallet, amount);
 
     // Debit the wallet with optimistic locking
-    const updatedWallet = await walletRepo.debitWallet(tx, wallet, amount);
+    const balanceM = money(wallet.balance, wallet.currency);
+    const amountM = money(amount, wallet.currency);
+    const newBalanceM = balanceM.subtract(amountM);
+    const newBalance = Number(newBalanceM.minor);
+
+    const updatedWallet = await walletRepo.updateWalletBalance(
+      tx,
+      wallet,
+      newBalance
+    );
 
     // Create transaction record
     const transaction = await txRepo.createTransaction(tx, {

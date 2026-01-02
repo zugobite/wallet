@@ -18,6 +18,7 @@ A secure, production-ready wallet transaction API with user authentication, two-
 - **HMAC-SHA256 Request Signing** - Cryptographic request integrity verification
 - **Replay Protection** - Nonce-based protection against duplicate requests
 - **Idempotent Operations** - Safe retry handling with referenceId tracking
+- **Precision Math** - Financial calculations using `monetra` for accuracy
 - **Full Audit Trail** - Complete ledger with balance snapshots
 - **Serverless Ready** - AWS Lambda compatible via serverless-http
 

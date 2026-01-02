@@ -5,9 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-02
+
+### Changed
+
+- **Upgraded to monetra v1.2.0** - Adopted new smart syntax and features.
+  - Replaced `Money.fromMinor()` with the simpler `money()` helper function across all files.
+  - The `money(amount, currency)` helper accepts numbers as minor units and strings as major units.
+  - Cleaner, more readable code with less boilerplate.
+  - Added support for new features: `MoneyBag` (multi-currency), `Converter` (exchange rates).
+  - Added validation helpers: `assertNonNegative`, `assertSameCurrency`.
+  - Added custom currency registration: `registerCurrency`, `isCurrencyRegistered`.
+
+## [1.1.0] - 2026-01-02
+
+### Changed
+
+- **Financial Math Engine** - Migrated from `decimal.js` to `monetra` v1.0.1 for handling financial calculations.
+  - Switched to BigInt-based integer math for precision.
+  - Updated all domain logic and services to use `Money` objects with `Money.fromMinor()`.
+  - Implemented comparison methods: `lessThan()`, `greaterThan()`, `equals()`, `isZero()`, `isNegative()`.
+  - Database now stores minor units as integers (casted from BigInt using `.minor` property).
+  - Added comprehensive migration documentation in `docs/010-MIGRATION_DECIMAL_TO_MONETRA.md`.
+
 ## [1.0.0] - 2025-12-31
 
-### 🎉 Initial Release
+### Initial Release
 
 This is the first public release of the Wallet Transaction API, a secure, production-ready financial transaction system with two-phase debit authorization.
 

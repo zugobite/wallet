@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
+import { money } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
 import { logger } from "../../infra/logger.mjs";
 
@@ -61,15 +62,19 @@ export default async function reverseTransaction(req, res) {
       const wallet = transaction.wallet;
 
       // Calculate new balance based on original transaction type
-      let newBalance;
+      const currency = wallet.currency || "USD";
+      const balanceM = money(wallet.balance, currency);
+      const amountM = money(transaction.amount, currency);
+
+      let newBalanceM;
       let reversalType;
       if (transaction.type === "debit") {
         // Debit was subtracted, so add it back
-        newBalance = wallet.balance + transaction.amount;
+        newBalanceM = balanceM.add(amountM);
         reversalType = "credit";
       } else if (transaction.type === "credit") {
         // Credit was added, so subtract it
-        if (wallet.balance < transaction.amount) {
+        if (balanceM.lessThan(amountM)) {
           const err = new Error(
             "Insufficient balance to reverse credit transaction"
           );
@@ -77,7 +82,7 @@ export default async function reverseTransaction(req, res) {
           err.code = "INSUFFICIENT_FUNDS";
           throw err;
         }
-        newBalance = wallet.balance - transaction.amount;
+        newBalanceM = balanceM.subtract(amountM);
         reversalType = "debit";
       } else {
         const err = new Error("Cannot reverse this transaction type");
@@ -85,6 +90,8 @@ export default async function reverseTransaction(req, res) {
         err.code = "INVALID_TRANSACTION_TYPE";
         throw err;
       }
+
+      const newBalance = Number(newBalanceM.minor);
 
       // Update original transaction status
       await tx.transaction.update({

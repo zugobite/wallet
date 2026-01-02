@@ -1,5 +1,6 @@
 import { prisma } from "../infra/prisma.mjs";
 import { v4 as uuid } from "uuid";
+import { money } from "monetra";
 
 export default async function debit(req, res) {
   const { walletId, amount, referenceId } = req.body;
@@ -25,17 +26,24 @@ export default async function debit(req, res) {
         throw err;
       }
 
-      if (wallet.balance < amount) {
+      const currency = wallet.currency || "USD";
+      const balanceM = money(wallet.balance, currency);
+      const amountM = money(amount, currency);
+
+      if (balanceM.lessThan(amountM)) {
         const err = new Error("Insufficient funds");
         err.statusCode = 422;
         err.code = "INSUFFICIENT_FUNDS";
         throw err;
       }
 
+      const newBalanceM = balanceM.subtract(amountM);
+      const newBalance = Number(newBalanceM.minor);
+
       const updatedWallet = await tx.wallet.update({
         where: { id: walletId, version: wallet.version },
         data: {
-          balance: wallet.balance - amount,
+          balance: newBalance,
           version: { increment: 1 },
         },
       });

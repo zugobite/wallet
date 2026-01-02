@@ -1,5 +1,6 @@
 import { prisma } from "../infra/prisma.mjs";
 import { v4 as uuid } from "uuid";
+import { money } from "monetra";
 
 export default async function credit(req, res) {
   const { walletId, amount, referenceId } = req.body;
@@ -25,9 +26,15 @@ export default async function credit(req, res) {
         throw err;
       }
 
+      const currency = wallet.currency || "USD";
+      const balanceM = money(wallet.balance, currency);
+      const amountM = money(amount, currency);
+      const newBalanceM = balanceM.add(amountM);
+      const newBalance = Number(newBalanceM.minor);
+
       const updatedWallet = await tx.wallet.update({
         where: { id: walletId },
-        data: { balance: wallet.balance + amount },
+        data: { balance: newBalance },
       });
 
       const transaction = await tx.transaction.create({
