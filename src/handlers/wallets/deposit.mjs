@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
+import { Money, getCurrency } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
 import { logger } from "../../infra/logger.mjs";
 
@@ -70,9 +71,15 @@ export default async function deposit(req, res) {
       }
 
       // Credit the wallet
+      const currency = getCurrency(wallet.currency || "USD");
+      const balanceM = Money.fromMinor(wallet.balance, currency);
+      const amountM = Money.fromMinor(amount, currency);
+      const newBalanceM = balanceM.add(amountM);
+      const newBalance = Number(newBalanceM.toMinor());
+
       const updatedWallet = await tx.wallet.update({
         where: { id },
-        data: { balance: wallet.balance + amount },
+        data: { balance: newBalance },
       });
 
       // Create transaction record
