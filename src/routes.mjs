@@ -18,6 +18,7 @@ router.use(auth);
 router.post("/authorize", idempotency, authorize);
 router.post("/debit", idempotency, debit);
 router.post("/credit", idempotency, credit);
-router.post("/reverse", idempotency, reverse);
+// Reverse endpoint handles its own idempotency (checks if already reversed)
+router.post("/reverse", reverse);
 
 export default router;

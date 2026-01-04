@@ -79,9 +79,11 @@ export default async function getTransactions(req, res) {
 
     return res.status(200).json({
       status: 200,
+      code: "OK",
       data: {
         transactions: transactions.map((tx) => ({
           id: tx.id,
+          walletId: tx.walletId,
           type: tx.type,
           amount: tx.amount,
           status: tx.status,

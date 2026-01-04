@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-01-04
+
+### Added
+
+- **End-to-End Test Suite** - Added comprehensive `tests/e2e/run_curl_flows.sh` script covering all major user flows.
+  - Tests registration, login, wallet details, deposits, withdrawals, authorizations, debits, and reversals.
+  - Validates HTTP status codes and response payloads.
+  - Ensures balance consistency across operations.
+
+### Fixed
+
+- **Reversal Idempotency** - Fixed `409 Conflict` error on valid reversals by removing generic idempotency middleware from the `/reverse` endpoint.
+  - The reversal handler manages its own state checks (e.g., ensuring a transaction isn't already reversed).
+  - Generic middleware was incorrectly flagging valid reversal requests as duplicates.
+
+## [1.3.2] - 2026-01-04
+
+### Fixed
+
+- **CORS Preflight Handling** - Added global CORS middleware to properly handle `OPTIONS` preflight requests.
+  - Returns `204 No Content` immediately for `OPTIONS` requests before authentication.
+  - Sets correct `Access-Control-Allow-*` headers for cross-origin requests.
+  - Fixes 401 Unauthorized errors when frontend apps attempt to access protected routes.
+- **Transaction Response Shape** - Updated `GET /api/v1/wallets/:id/transactions` response to include `walletId` in each transaction object.
+  - Ensures frontend can correctly key/group transactions by wallet.
+  - Added consistent top-level `code: "OK"` field to match API standards.
+
 ## [1.3.1] - 2026-01-04
 
 ### Fixed

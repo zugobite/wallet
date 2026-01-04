@@ -262,6 +262,36 @@ mysql -u root -p -e "SELECT 1;"
 | `POST` | `/api/v1/admin/wallets/:id/unfreeze`     | Unfreeze a wallet         |
 | `POST` | `/api/v1/admin/transactions/:id/reverse` | Admin reverse transaction |
 
+## Testing
+
+### Unit Tests
+
+Run the Jest unit test suite:
+
+```bash
+npm test
+```
+
+### End-to-End (E2E) Tests
+
+Run the comprehensive cURL-based E2E test suite to verify all flows against a running server:
+
+```bash
+# 1. Start the server
+npm run dev
+
+# 2. Run the test script (in a separate terminal)
+./tests/e2e/run_curl_flows.sh
+```
+
+The E2E script tests:
+- User Registration & Login
+- Wallet Details & Balance Checks
+- Deposits & Withdrawals
+- Two-Phase Transactions (Authorize & Debit)
+- Transaction Reversal
+- Transaction History
+
 ## cURL Examples
 
 ### Register a New Account

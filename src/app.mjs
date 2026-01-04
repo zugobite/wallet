@@ -85,7 +85,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     name: "Wallet API",
     description: "A secure, production-ready wallet transaction API with two-phase debit authorization",
-    version: "1.3.0",
+    version: "1.3.3",
     documentation: "/api/v1",
     endpoints: {
       api: "/api/v1",
@@ -145,7 +145,7 @@ app.get("/api/v1", (req, res) => {
     status: 200,
     code: "OK",
     data: {
-      version: "1.3.0",
+      version: "1.3.3",
       endpoints: {
         auth: [
           "POST /api/v1/auth/register",

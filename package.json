@@ -1,6 +1,6 @@
 {
   "name": "wallet",
-  "version": "1.3.0",
+  "version": "1.3.3",
   "description": "A secure, production-ready wallet transaction API with two-phase debit authorization",
   "type": "module",
   "main": "src/app.mjs",
