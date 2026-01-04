@@ -188,7 +188,49 @@ export const handler = serverless(app);
 
 if (process.env.NODE_ENV !== "production") {
   const port = process.env.PORT || 3000;
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     logger.info({ port }, `Server running on :${port}`);
   });
+
+  // Graceful shutdown handling
+  const gracefulShutdown = async (signal) => {
+    logger.info({ signal }, 'Received shutdown signal, closing server gracefully...');
+    
+    server.close(async () => {
+      logger.info('HTTP server closed');
+      
+      try {
+        // Close database connections
+        const { closeDatabaseConnections } = await import('./infra/prisma.mjs');
+        await closeDatabaseConnections();
+        logger.info('Database connections closed');
+        
+        // Close Redis connections if any
+        try {
+          const { closeRedisConnections } = await import('./infra/redis.mjs');
+          await closeRedisConnections();
+          logger.info('Redis connections closed');
+        } catch (err) {
+          // Redis module might not export closeRedisConnections yet
+          logger.warn('Redis cleanup not available');
+        }
+        
+        logger.info('Graceful shutdown complete');
+        process.exit(0);
+      } catch (err) {
+        logger.error({ err }, 'Error during graceful shutdown');
+        process.exit(1);
+      }
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  // Listen for termination signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }

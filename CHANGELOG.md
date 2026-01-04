@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-01-04
+
+### Fixed
+
+- **Critical: Database connection pool timeout** - Fixed `PrismaMariaDb` adapter configuration that caused pool exhaustion and 20+ second request timeouts.
+  - Root cause: Adapter was incorrectly passed a pre-created `mariadb.createPool()` object instead of a configuration object.
+  - The `PrismaMariaDb` factory expects a config object and manages its own pool internally.
+  - Registration now completes in ~260ms (was timing out after 20,000ms).
+- **Connection URL parsing** - Added `parseConnectionUrl()` helper to properly parse `DATABASE_ADAPTER_URL` into adapter config with host, port, user, password, and database fields.
+- **Pool configuration options** - Added proper pool settings: `connectionLimit`, `acquireTimeout`, `connectTimeout`, `idleTimeout`, `minDelayValidation`.
+
+### Added
+
+- **Graceful shutdown handling** - Added SIGTERM/SIGINT signal handlers for clean server shutdown.
+  - Properly closes HTTP server before disconnecting database.
+  - Calls `prisma.$disconnect()` to release database connections.
+  - Closes Redis connections via new `closeRedisConnections()` function.
+  - 10-second forced shutdown timeout as safety net.
+- **Database cleanup function** - Added `closeDatabaseConnections()` export to `prisma.mjs`.
+- **Redis cleanup function** - Added `closeRedisConnections()` export to `redis.mjs`.
+
 ## [1.3.0] - 2026-01-04
 
 ### Added

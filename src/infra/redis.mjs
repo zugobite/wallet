@@ -16,3 +16,11 @@ const redisConfig = process.env.REDIS_URL
     };
 
 export const redis = new Redis(redisConfig);
+
+/**
+ * Gracefully close Redis connections
+ * Should be called on application shutdown
+ */
+export async function closeRedisConnections() {
+  await redis.quit();
+}
