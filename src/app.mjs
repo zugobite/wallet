@@ -18,6 +18,39 @@ const app = express();
 // Trust proxy for accurate IP detection behind load balancers
 app.set("trust proxy", true);
 
+// ============================================================================
+// CORS Middleware - Must be before body parsing and auth
+// ============================================================================
+app.use((req, res, next) => {
+  const allowedOrigins = process.env.CORS_ORIGINS?.split(",") || [
+    "http://localhost:3000",
+    "http://localhost:5173",
+  ];
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  }
+
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Request-Id, X-Signature, X-Timestamp, X-Nonce"
+  );
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Max-Age", "86400");
+
+  // Handle preflight requests immediately - don't pass to auth
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
+  next();
+});
+
 // Body parsing
 app.use(express.json());
 
