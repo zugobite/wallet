@@ -1,4 +1,4 @@
-import { money, assertNonNegative } from "monetra";
+import { money } from "monetra";
 
 /**
  * Domain error with code and status

@@ -1,5 +1,5 @@
 import { getUserById } from "../../services/auth.service.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 /**
  * GET /api/v1/auth/me

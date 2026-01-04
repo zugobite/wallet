@@ -3,7 +3,7 @@ import {
   authenticateUser,
   generateToken,
 } from "../../services/auth.service.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const loginSchema = z.object({
   email: z.email("Invalid email format"),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { registerUser, generateToken } from "../../services/auth.service.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const registerSchema = z.object({
   email: z.email("Invalid email format"),

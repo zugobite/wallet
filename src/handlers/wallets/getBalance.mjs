@@ -1,5 +1,5 @@
 import { prisma } from "../../infra/prisma.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 /**
  * GET /api/v1/wallets/:id/balance

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-04
+
+### Added
+
+- **Root endpoint** (`GET /`) - Added API information endpoint at the root URL listing all available endpoints.
+- **Glossary in API response** - Root endpoint now includes a `glossary` object with clear definitions for all transaction operations.
+- **Terminology section in README** - Added comprehensive terminology table explaining the difference between authorize/reserve, debit/capture, reverse/release, etc.
+- **Transaction States documentation** - Added table explaining `pending`, `completed`, and `reversed` states.
+
+### Changed
+
+- **Upgraded to monetra v2.1.0** - Updated from v1.2.0 to the latest v2.1.0 for improved monetary calculations.
+  - New features: `Money.fromCents()`, `Money.fromDecimal()`, `Money.clamp()`, `Money.toDecimalString()`.
+  - Ledger improvements with versioned snapshots and browser-compatible crypto.
+  - Enhanced converter with historical exchange rate support.
+- **Improved documentation clarity** - Updated README and API responses with clearer terminology:
+  - `authorize` = **Reserve** (hold/block funds for later capture)
+  - `debit` = **Capture** (complete authorized transaction)
+  - `credit` = **Add** (direct credit to wallet)
+  - `reverse` = **Release/Undo** (cancel reservation or undo transaction)
+- **Enhanced Two-Phase Debit diagram** - Updated flow diagram to show Reserve → Capture/Release terminology.
+- **Added installation guides** - Added step-by-step dependency installation for macOS, Ubuntu/Debian, and Windows.
+- **Added troubleshooting section** - Common issues with Redis and MySQL connection errors.
+
+### Fixed
+
+- **Logger imports** - Fixed 13 handler files using incorrect named import `{ logger }` instead of default import.
+- **Redis import** - Fixed `healthCheck.mjs` using incorrect default import instead of named import `{ redis }`.
+
 ## [1.2.0] - 2026-01-02
 
 ### Changed

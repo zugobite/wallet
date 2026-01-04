@@ -2,7 +2,7 @@ import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { money } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const bodySchema = z.object({
   reason: z.string().min(1, "Reason is required").max(500),

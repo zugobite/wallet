@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../infra/prisma.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const querySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),

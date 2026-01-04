@@ -47,13 +47,72 @@ app.get("/metrics", (req, res) => {
 // API Endpoints
 // ============================================================================
 
+// Root endpoint - API information
+app.get("/", (req, res) => {
+  res.status(200).json({
+    name: "Wallet API",
+    description: "A secure, production-ready wallet transaction API with two-phase debit authorization",
+    version: "1.3.0",
+    documentation: "/api/v1",
+    endpoints: {
+      api: "/api/v1",
+      health: "/health",
+      metrics: "/metrics",
+    },
+    glossary: {
+      authorize: "Reserve/hold funds for later capture (creates PENDING transaction)",
+      debit: "Capture/complete a reserved transaction (PENDING → COMPLETED)",
+      credit: "Add funds directly to wallet (immediate)",
+      reverse: "Release/cancel a reservation or undo a transaction (→ REVERSED)",
+      deposit: "Customer-initiated credit to own wallet",
+      withdraw: "Customer-initiated debit from own wallet",
+      freeze: "Admin action to block all wallet operations",
+      unfreeze: "Admin action to restore wallet operations",
+    },
+    links: {
+      auth: {
+        register: "POST /api/v1/auth/register - Create new account",
+        login: "POST /api/v1/auth/login - Authenticate and get JWT token",
+        me: "GET /api/v1/auth/me - Get current user info",
+      },
+      wallets: {
+        get: "GET /api/v1/wallets/:id - Get wallet details",
+        balance: "GET /api/v1/wallets/:id/balance - Get current balance",
+        transactions: "GET /api/v1/wallets/:id/transactions - Get transaction history",
+        deposit: "POST /api/v1/wallets/:id/deposit - Add funds (credit)",
+        withdraw: "POST /api/v1/wallets/:id/withdraw - Remove funds (debit)",
+      },
+      admin: {
+        users: "GET /api/v1/admin/users - List all users",
+        wallets: "GET /api/v1/admin/wallets - List all wallets",
+        transactions: "GET /api/v1/admin/transactions - List all transactions",
+        freeze: "POST /api/v1/admin/wallets/:id/freeze - Block wallet operations",
+        unfreeze: "POST /api/v1/admin/wallets/:id/unfreeze - Restore wallet operations",
+        reverse: "POST /api/v1/admin/transactions/:id/reverse - Undo completed transaction",
+      },
+      transactions: {
+        authorize: "POST /api/v1/transactions/authorize - Reserve funds (hold)",
+        debit: "POST /api/v1/transactions/debit - Capture reserved funds",
+        credit: "POST /api/v1/transactions/credit - Direct credit",
+        reverse: "POST /api/v1/transactions/reverse - Release reservation (undo)",
+      },
+      monitoring: {
+        health: "GET /health - Full health check",
+        liveness: "GET /health/live - Kubernetes liveness probe",
+        readiness: "GET /health/ready - Kubernetes readiness probe",
+        metrics: "GET /metrics - Prometheus metrics",
+      },
+    },
+  });
+});
+
 // API info endpoint
 app.get("/api/v1", (req, res) => {
   res.status(200).json({
     status: 200,
     code: "OK",
     data: {
-      version: "1.0.0",
+      version: "1.3.0",
       endpoints: {
         auth: [
           "POST /api/v1/auth/register",

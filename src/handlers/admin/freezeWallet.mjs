@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "../../infra/prisma.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const bodySchema = z.object({
   reason: z.string().min(1).max(500).optional(),

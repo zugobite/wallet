@@ -24,6 +24,7 @@ A secure, production-ready wallet transaction API with user authentication, two-
 
 ## Table of Contents
 
+- [Terminology](#-terminology)
 - [Quick Start](#-quick-start)
 - [API Endpoints](#-api-endpoints)
 - [cURL Examples](#-curl-examples)
@@ -35,6 +36,29 @@ A secure, production-ready wallet transaction API with user authentication, two-
 - [Contributing](#-contributing)
 - [License](#-license)
 
+## Terminology
+
+Understanding the transaction terminology used in this API:
+
+| Term          | Alias        | Description                                                                                               |
+| ------------- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| **Authorize** | Reserve      | Places a hold on funds without transferring them. The amount is reserved but still belongs to the wallet. |
+| **Debit**     | Capture      | Completes a previously authorized transaction, actually transferring the reserved funds.                  |
+| **Credit**    | Add          | Adds funds directly to a wallet balance.                                                                  |
+| **Reverse**   | Release/Undo | Cancels a pending authorization, releasing the held funds back to available balance.                      |
+| **Deposit**   | -            | Customer-initiated credit to their own wallet.                                                            |
+| **Withdraw**  | -            | Customer-initiated debit from their own wallet.                                                           |
+| **Freeze**    | Lock         | Admin action to prevent all transactions on a wallet.                                                     |
+| **Unfreeze**  | Unlock       | Admin action to restore normal wallet operations.                                                         |
+
+### Transaction States
+
+| State       | Description                                            |
+| ----------- | ------------------------------------------------------ |
+| `pending`   | Authorization created, funds reserved but not captured |
+| `completed` | Transaction finalized, funds transferred               |
+| `reversed`  | Authorization cancelled, funds released                |
+
 ## Quick Start
 
 ### Prerequisites
@@ -43,7 +67,82 @@ A secure, production-ready wallet transaction API with user authentication, two-
 - MySQL 8.x or MariaDB 10.x
 - Redis 7.x
 
-### Installation
+### Installation by OS
+
+#### macOS
+
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install dependencies
+brew install node@20 mysql redis
+
+# Start services
+brew services start mysql
+brew services start redis
+
+# Clone and setup project
+git clone https://github.com/zugobite/wallet.git
+cd wallet
+npm install
+cp .env.example .env
+npm run prisma:generate
+npm run prisma:migrate
+npm run dev
+```
+
+#### Ubuntu/Debian
+
+```bash
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install MySQL
+sudo apt-get install -y mysql-server
+sudo systemctl start mysql
+
+# Install Redis
+sudo apt-get install -y redis-server
+sudo systemctl start redis
+
+# Clone and setup project
+git clone https://github.com/zugobite/wallet.git
+cd wallet
+npm install
+cp .env.example .env
+npm run prisma:generate
+npm run prisma:migrate
+npm run dev
+```
+
+#### Windows
+
+```powershell
+# Install Chocolatey if not already installed (run as Administrator)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install dependencies
+choco install nodejs-lts mysql redis-64
+
+# Start services (run as Administrator)
+net start mysql
+net start redis
+
+# Clone and setup project
+git clone https://github.com/zugobite/wallet.git
+cd wallet
+npm install
+copy .env.example .env
+npm run prisma:generate
+npm run prisma:migrate
+npm run dev
+```
+
+### Quick Start (All Platforms)
 
 ```bash
 # Clone the repository
@@ -75,34 +174,73 @@ The server will start at `http://localhost:3000`.
 curl http://localhost:3000/health
 ```
 
+### Troubleshooting
+
+#### Redis Connection Issues
+
+```bash
+# macOS - Check if Redis is running
+brew services list | grep redis
+
+# Start Redis if not running
+brew services start redis
+
+# Ubuntu/Debian
+sudo systemctl status redis
+sudo systemctl start redis
+```
+
+#### MySQL Connection Issues
+
+```bash
+# Check MySQL status
+# macOS
+brew services list | grep mysql
+
+# Ubuntu/Debian
+sudo systemctl status mysql
+
+# Verify connection
+mysql -u root -p -e "SELECT 1;"
+```
+
+#### Common Errors
+
+| Error                               | Solution                                                                                     |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `ECONNREFUSED 127.0.0.1:6379`       | Redis is not running. Start with `brew services start redis` or `sudo systemctl start redis` |
+| `ECONNREFUSED 127.0.0.1:3306`       | MySQL is not running. Start with `brew services start mysql` or `sudo systemctl start mysql` |
+| `P1001: Can't reach database`       | Check DATABASE_URL in .env, ensure MySQL is running                                          |
+| `assertNonNegative is not exported` | Update monetra to v2.1.0: `npm install monetra@^2.1.0`                                       |
+
 ## API Endpoints
 
 ### Public Endpoints
 
-| Method | Endpoint       | Description                 |
-| ------ | -------------- | --------------------------- |
-| `GET`  | `/health`      | Health check (no auth)      |
-| `GET`  | `/health/live` | Liveness probe (Kubernetes) |
-| `GET`  | `/health/ready`| Readiness probe (Kubernetes)|
-| `GET`  | `/api/v1`      | API information (no auth)   |
+| Method | Endpoint        | Description                  |
+| ------ | --------------- | ---------------------------- |
+| `GET`  | `/health`       | Health check (no auth)       |
+| `GET`  | `/health/live`  | Liveness probe (Kubernetes)  |
+| `GET`  | `/health/ready` | Readiness probe (Kubernetes) |
+| `GET`  | `/api/v1`       | API information (no auth)    |
 
 ### Authentication Endpoints
 
-| Method | Endpoint               | Description            |
-| ------ | ---------------------- | ---------------------- |
-| `POST` | `/api/v1/auth/register`| Register new user      |
-| `POST` | `/api/v1/auth/login`   | Login and get token    |
-| `GET`  | `/api/v1/auth/me`      | Get current user       |
+| Method | Endpoint                | Description         |
+| ------ | ----------------------- | ------------------- |
+| `POST` | `/api/v1/auth/register` | Register new user   |
+| `POST` | `/api/v1/auth/login`    | Login and get token |
+| `GET`  | `/api/v1/auth/me`       | Get current user    |
 
 ### Customer Wallet Endpoints
 
-| Method | Endpoint                           | Description              |
-| ------ | ---------------------------------- | ------------------------ |
-| `GET`  | `/api/v1/wallets/:id`              | Get wallet details       |
-| `GET`  | `/api/v1/wallets/:id/balance`      | Get wallet balance       |
-| `GET`  | `/api/v1/wallets/:id/transactions` | Get transaction history  |
-| `POST` | `/api/v1/wallets/:id/deposit`      | Deposit funds            |
-| `POST` | `/api/v1/wallets/:id/withdraw`     | Withdraw funds           |
+| Method | Endpoint                           | Description             |
+| ------ | ---------------------------------- | ----------------------- |
+| `GET`  | `/api/v1/wallets/:id`              | Get wallet details      |
+| `GET`  | `/api/v1/wallets/:id/balance`      | Get wallet balance      |
+| `GET`  | `/api/v1/wallets/:id/transactions` | Get transaction history |
+| `POST` | `/api/v1/wallets/:id/deposit`      | Deposit funds           |
+| `POST` | `/api/v1/wallets/:id/withdraw`     | Withdraw funds          |
 
 ### Transaction Endpoints
 
@@ -115,13 +253,13 @@ curl http://localhost:3000/health
 
 ### Admin Endpoints (ADMIN role required)
 
-| Method | Endpoint                               | Description              |
-| ------ | -------------------------------------- | ------------------------ |
-| `GET`  | `/api/v1/admin/users`                  | List all users           |
-| `GET`  | `/api/v1/admin/wallets`                | List all wallets         |
-| `GET`  | `/api/v1/admin/transactions`           | List all transactions    |
-| `POST` | `/api/v1/admin/wallets/:id/freeze`     | Freeze a wallet          |
-| `POST` | `/api/v1/admin/wallets/:id/unfreeze`   | Unfreeze a wallet        |
+| Method | Endpoint                                 | Description               |
+| ------ | ---------------------------------------- | ------------------------- |
+| `GET`  | `/api/v1/admin/users`                    | List all users            |
+| `GET`  | `/api/v1/admin/wallets`                  | List all wallets          |
+| `GET`  | `/api/v1/admin/transactions`             | List all transactions     |
+| `POST` | `/api/v1/admin/wallets/:id/freeze`       | Freeze a wallet           |
+| `POST` | `/api/v1/admin/wallets/:id/unfreeze`     | Unfreeze a wallet         |
 | `POST` | `/api/v1/admin/transactions/:id/reverse` | Admin reverse transaction |
 
 ## cURL Examples
@@ -349,17 +487,17 @@ wallet/
 
 Comprehensive documentation is available in the `/docs` directory:
 
-| Document                                                | Description                          |
-| ------------------------------------------------------- | ------------------------------------ |
-| [001-PROJECT_OVERVIEW.md](docs/001-PROJECT_OVERVIEW.md) | Architecture and design decisions    |
-| [002-GETTING_STARTED.md](docs/002-GETTING_STARTED.md)   | Setup, configuration, and quick start|
-| [003-API_REFERENCE.md](docs/003-API_REFERENCE.md)       | Complete API docs with cURL examples |
-| [004-AUTHENTICATION.md](docs/004-AUTHENTICATION.md)     | Auth, RBAC, and signing details      |
-| [005-DATABASE_SCHEMA.md](docs/005-DATABASE_SCHEMA.md)   | Data model documentation             |
-| [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                        |
-| [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions              |
-| [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting          |
-| [009-SCALING.md](docs/009-SCALING.md)                   | Scaling to 100M+ transactions        |
+| Document                                                | Description                           |
+| ------------------------------------------------------- | ------------------------------------- |
+| [001-PROJECT_OVERVIEW.md](docs/001-PROJECT_OVERVIEW.md) | Architecture and design decisions     |
+| [002-GETTING_STARTED.md](docs/002-GETTING_STARTED.md)   | Setup, configuration, and quick start |
+| [003-API_REFERENCE.md](docs/003-API_REFERENCE.md)       | Complete API docs with cURL examples  |
+| [004-AUTHENTICATION.md](docs/004-AUTHENTICATION.md)     | Auth, RBAC, and signing details       |
+| [005-DATABASE_SCHEMA.md](docs/005-DATABASE_SCHEMA.md)   | Data model documentation              |
+| [006-TESTING.md](docs/006-TESTING.md)                   | Testing guide                         |
+| [007-DEPLOYMENT.md](docs/007-DEPLOYMENT.md)             | Deployment instructions               |
+| [008-MONITORING.md](docs/008-MONITORING.md)             | Logging, metrics & alerting           |
+| [009-SCALING.md](docs/009-SCALING.md)                   | Scaling to 100M+ transactions         |
 
 ## Testing
 

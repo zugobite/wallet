@@ -1,5 +1,5 @@
 import { prisma } from "../infra/prisma.mjs";
-import redis from "../infra/redis.mjs";
+import { redis } from "../infra/redis.mjs";
 import logger from "../infra/logger.mjs";
 
 /**

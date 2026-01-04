@@ -2,7 +2,7 @@ import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { money } from "monetra";
 import { prisma } from "../../infra/prisma.mjs";
-import { logger } from "../../infra/logger.mjs";
+import logger from "../../infra/logger.mjs";
 
 const withdrawSchema = z.object({
   amount: z.number().int().positive("Amount must be a positive integer"),
