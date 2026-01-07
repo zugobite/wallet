@@ -13,7 +13,7 @@ import {
   readinessHandler,
 } from "./middleware/healthCheck.mjs";
 
-const app = express();
+export const app = express();
 
 // Trust proxy for accurate IP detection behind load balancers
 app.set("trust proxy", true);
@@ -219,7 +219,7 @@ app.use(errorLogger);
 
 export const handler = serverless(app);
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
   const port = process.env.PORT || 3000;
   const server = app.listen(port, () => {
     logger.info({ port }, `Server running on :${port}`);

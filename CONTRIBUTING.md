@@ -49,7 +49,7 @@ cd wallet
 3. Add the upstream repository:
 
 ```bash
-git remote add upstream https://github.com/ORIGINAL_OWNER/wallet.git
+git remote add upstream https://github.com/zugobite/wallet.git
 ```
 
 4. Keep your fork synced:

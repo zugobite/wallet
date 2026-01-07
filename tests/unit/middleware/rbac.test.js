@@ -1,116 +1,84 @@
-import { describe, it, expect, beforeEach } from "@jest/globals";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { requireRoles, requireAdmin, requireCustomer, requireAuthenticated } from "../../../src/middleware/rbac.mjs";
 
-/**
- * RBAC Middleware Tests
- *
- * Unit tests for role-based access control logic.
- */
+describe("RBAC Middleware", () => {
+    let req, res, next;
 
-describe("RBAC Middleware Logic", () => {
-  // Simulate the requireRoles middleware logic
-  const checkRoles = (userRole, allowedRoles) => {
-    if (!userRole) {
-      return { allowed: false, code: "UNAUTHORIZED", status: 401 };
-    }
-    if (!allowedRoles.includes(userRole)) {
-      return { allowed: false, code: "FORBIDDEN", status: 403 };
-    }
-    return { allowed: true };
-  };
-
-  describe("requireRoles", () => {
-    it("should allow access for matching role", () => {
-      const result = checkRoles("ADMIN", ["ADMIN"]);
-      expect(result.allowed).toBe(true);
+    beforeEach(() => {
+        req = { user: { role: "CUSTOMER" } };
+        res = {
+            status: vi.fn().mockReturnThis(),
+            json: vi.fn()
+        };
+        next = vi.fn();
     });
 
-    it("should allow access when user has one of multiple allowed roles", () => {
-      const result = checkRoles("CUSTOMER", ["ADMIN", "CUSTOMER"]);
-      expect(result.allowed).toBe(true);
+    describe("requireRoles generic", () => {
+        it("should return 401 if not authenticated", () => {
+            req.user = undefined;
+            const middleware = requireRoles("ADMIN");
+            middleware(req, res, next);
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it("should return 403 if role mismatch", () => {
+            const middleware = requireRoles("ADMIN");
+            middleware(req, res, next); // user is CUSTOMER
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it("should call next if role matches", () => {
+            req.user.role = "ADMIN";
+            const middleware = requireRoles("ADMIN");
+            middleware(req, res, next);
+            expect(next).toHaveBeenCalled();
+        });
     });
 
-    it("should deny access for non-matching role", () => {
-      const result = checkRoles("CUSTOMER", ["ADMIN"]);
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("FORBIDDEN");
-      expect(result.status).toBe(403);
+    describe("requireAdmin", () => {
+        it("should allow ADMIN", () => {
+            req.user.role = "ADMIN";
+            requireAdmin(req, res, next);
+            expect(next).toHaveBeenCalled();
+        });
+
+        it("should deny CUSTOMER", () => {
+             requireAdmin(req, res, next);
+             expect(res.status).toHaveBeenCalledWith(403);
+        });
     });
 
-    it("should return unauthorized for missing user", () => {
-      const result = checkRoles(undefined, ["ADMIN"]);
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("UNAUTHORIZED");
-      expect(result.status).toBe(401);
+    describe("requireCustomer", () => {
+         it("should allow CUSTOMER", () => {
+            requireCustomer(req, res, next);
+            expect(next).toHaveBeenCalled();
+        });
+
+        it("should deny ADMIN", () => {
+             req.user.role = "ADMIN";
+             requireCustomer(req, res, next);
+             expect(res.status).toHaveBeenCalledWith(403);
+        });
     });
 
-    it("should return unauthorized for null role", () => {
-      const result = checkRoles(null, ["ADMIN"]);
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("UNAUTHORIZED");
-      expect(result.status).toBe(401);
+    describe("requireAuthenticated", () => {
+        it("should allow ADMIN", () => {
+             req.user.role = "ADMIN";
+             requireAuthenticated(req, res, next);
+             expect(next).toHaveBeenCalled();
+        });
+
+        it("should allow CUSTOMER", () => {
+             requireAuthenticated(req, res, next);
+             expect(next).toHaveBeenCalled();
+        });
+
+        it("should deny UNKNOWN", () => {
+             req.user.role = "UNKNOWN";
+             requireAuthenticated(req, res, next);
+             expect(res.status).toHaveBeenCalledWith(403);
+        });
     });
-  });
-
-  describe("requireAdmin", () => {
-    const checkAdmin = (userRole) => checkRoles(userRole, ["ADMIN"]);
-
-    it("should allow ADMIN role", () => {
-      const result = checkAdmin("ADMIN");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("should deny CUSTOMER role", () => {
-      const result = checkAdmin("CUSTOMER");
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("FORBIDDEN");
-    });
-  });
-
-  describe("requireCustomer", () => {
-    const checkCustomer = (userRole) => checkRoles(userRole, ["CUSTOMER"]);
-
-    it("should allow CUSTOMER role", () => {
-      const result = checkCustomer("CUSTOMER");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("should deny ADMIN role", () => {
-      const result = checkCustomer("ADMIN");
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("FORBIDDEN");
-    });
-  });
-
-  describe("requireAuthenticated", () => {
-    const checkAuthenticated = (userRole) =>
-      checkRoles(userRole, ["ADMIN", "CUSTOMER"]);
-
-    it("should allow ADMIN role", () => {
-      const result = checkAuthenticated("ADMIN");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("should allow CUSTOMER role", () => {
-      const result = checkAuthenticated("CUSTOMER");
-      expect(result.allowed).toBe(true);
-    });
-
-    it("should deny unknown role", () => {
-      const result = checkAuthenticated("UNKNOWN");
-      expect(result.allowed).toBe(false);
-      expect(result.code).toBe("FORBIDDEN");
-    });
-  });
-
-  describe("role case sensitivity", () => {
-    it("should be case sensitive for roles", () => {
-      const result = checkRoles("admin", ["ADMIN"]);
-      expect(result.allowed).toBe(false);
-    });
-
-    it("should match exact role strings", () => {
-      const result = checkRoles("ADMIN ", ["ADMIN"]);
-      expect(result.allowed).toBe(false);
-    });
-  });
 });

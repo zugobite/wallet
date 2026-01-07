@@ -1,81 +1,64 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-/**
- * Idempotency Middleware Tests
- *
- * These are simplified unit tests that verify the idempotency logic
- * without importing the actual middleware (which has database dependencies).
- *
- * For full integration testing, see tests/integration/handlers/*.test.js
- */
+const { mockPrisma } = vi.hoisted(() => ({
+    mockPrisma: {
+        transaction: {
+            findFirst: vi.fn(),
+        }
+    }
+}));
 
-describe("Idempotency Logic", () => {
-  describe("referenceId validation", () => {
-    const validateReferenceId = (body) => {
-      if (!body.referenceId) {
-        return { valid: false, error: "Missing required field: referenceId" };
-      }
-      return { valid: true };
-    };
+vi.mock("../../../src/infra/prisma.mjs", () => ({ prisma: mockPrisma }));
 
-    it("should return error when referenceId is missing", () => {
-      const result = validateReferenceId({ amount: 1000 });
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Missing required field: referenceId");
-    });
+import { idempotency } from "../../../src/middleware/idempotency.mjs";
 
-    it("should return error when referenceId is empty", () => {
-      const result = validateReferenceId({ referenceId: "", amount: 1000 });
-      expect(result.valid).toBe(false);
-    });
+describe("Idempotency Middleware", () => {
+    let req, res, next;
 
-    it("should return valid for present referenceId", () => {
-      const result = validateReferenceId({
-        referenceId: "ref-123",
-        amount: 1000,
-      });
-      expect(result.valid).toBe(true);
-    });
-  });
-
-  describe("duplicate detection logic", () => {
-    const checkDuplicate = (existingTransaction) => {
-      if (existingTransaction) {
-        return {
-          isDuplicate: true,
-          error: "Duplicate transaction: referenceId already exists",
+    beforeEach(() => {
+        vi.clearAllMocks();
+        req = {
+            body: { referenceId: "ref-123" },
+            user: { account: { id: "acc-1" } }
         };
-      }
-      return { isDuplicate: false };
-    };
-
-    it("should detect duplicate when transaction exists", () => {
-      const existingTxn = { id: "txn-existing", referenceId: "ref-123" };
-      const result = checkDuplicate(existingTxn);
-      expect(result.isDuplicate).toBe(true);
-      expect(result.error).toBe(
-        "Duplicate transaction: referenceId already exists"
-      );
+        res = {
+            status: vi.fn().mockReturnThis(),
+            json: vi.fn()
+        };
+        next = vi.fn();
     });
 
-    it("should not detect duplicate when no transaction exists", () => {
-      const result = checkDuplicate(null);
-      expect(result.isDuplicate).toBe(false);
+    it("should validation referenceId presence", async () => {
+        req.body.referenceId = undefined;
+        await idempotency(req, res, next);
+        
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(next).not.toHaveBeenCalled();
     });
-  });
 
-  describe("account scoping", () => {
-    const buildQuery = (referenceId, accountId) => {
-      return {
-        referenceId,
-        wallet: { accountId },
-      };
-    };
-
-    it("should scope query to account", () => {
-      const query = buildQuery("ref-123", "account-456");
-      expect(query.referenceId).toBe("ref-123");
-      expect(query.wallet.accountId).toBe("account-456");
+    it("should allow unused referenceId", async () => {
+        mockPrisma.transaction.findFirst.mockResolvedValue(null);
+        
+        await idempotency(req, res, next);
+        
+        expect(mockPrisma.transaction.findFirst).toHaveBeenCalledWith({
+            where: {
+                referenceId: "ref-123",
+                wallet: { accountId: "acc-1" }
+            }
+        });
+        expect(next).toHaveBeenCalled();
     });
-  });
+
+    it("should reject used referenceId", async () => {
+        mockPrisma.transaction.findFirst.mockResolvedValue({ id: "tx-old" });
+        
+        await idempotency(req, res, next);
+        
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            error: expect.stringContaining("Duplicate transaction")
+        }));
+        expect(next).not.toHaveBeenCalled();
+    });
 });

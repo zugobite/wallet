@@ -1,8 +1,5 @@
 import "dotenv/config";
-import { jest, beforeAll, afterAll } from "@jest/globals";
-
-// Extend Jest timeout for database operations
-jest.setTimeout(30000);
+import { beforeAll, afterAll } from "vitest";
 
 // Global test setup
 beforeAll(async () => {

@@ -1,5 +1,4 @@
-import { describe, it, expect } from "@jest/globals";
-import { assertTransactionPending } from "../../../src/domain/transactions.mjs";
+import { assertTransactionPending, assertCanReverse } from "../../../src/domain/transactions.mjs";
 
 describe("Transaction Domain", () => {
   describe("assertTransactionPending", () => {
@@ -32,6 +31,27 @@ describe("Transaction Domain", () => {
     it("should not throw if transaction status is pending", () => {
       const txn = { id: "txn-1", status: "pending" };
       expect(() => assertTransactionPending(txn)).not.toThrow();
+    });
+  });
+
+  describe("assertCanReverse", () => {
+    it("should throw if transaction is null", () => {
+        expect(() => assertCanReverse(null)).toThrow("Transaction not found");
+    });
+
+    it("should throw if transaction is already reversed", () => {
+        const txn = { id: "tx-1", status: "reversed" };
+        expect(() => assertCanReverse(txn)).toThrow("Transaction already reversed");
+    });
+
+    it("should throw if transaction is pending (not completed)", () => {
+        const txn = { id: "tx-1", status: "pending" };
+        expect(() => assertCanReverse(txn)).toThrow("Only completed transactions can be reversed");
+    });
+
+    it("should not throw if transaction is completed", () => {
+        const txn = { id: "tx-1", status: "completed" };
+        expect(() => assertCanReverse(txn)).not.toThrow();
     });
   });
 });

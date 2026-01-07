@@ -1,175 +1,145 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { describe, it, expect, beforeEach } from "@jest/globals";
 
-/**
- * Auth Service Tests
- *
- * Unit tests for the authentication service logic.
- * Tests password hashing, JWT generation, and validation logic.
- */
+const { mockPrisma } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      user: {
+        findUnique: vi.fn(),
+      },
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
+    },
+  };
+});
 
-describe("Auth Service Logic", () => {
-  const JWT_SECRET = "test-jwt-secret";
+// Mock prisma.user.create explicitly since it needs to be available on the transaction client
+mockPrisma.user.create = vi.fn();
+mockPrisma.account = { create: vi.fn() }; // not directly used but good hygiene
+// The transaction client IS (or acts like) prisma itself in our mock
+// So tx.user.create should call mockPrisma.user.create
 
-  describe("password hashing", () => {
-    it("should hash a password", async () => {
-      const password = "securePassword123";
-      const hash = await bcrypt.hash(password, 12);
+vi.mock("../../../src/infra/prisma.mjs", () => ({
+  prisma: mockPrisma,
+}));
 
+import * as authService from "../../../src/services/auth.service.mjs";
+
+describe("Auth Service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.JWT_SECRET = "test-secret";
+  });
+
+  describe("hashPassword", () => {
+    it("should hash password", async () => {
+      const hash = await authService.hashPassword("password123");
       expect(hash).toBeDefined();
-      expect(hash).not.toBe(password);
-      expect(hash.length).toBeGreaterThan(50);
+      expect(hash).not.toBe("password123");
     });
+  });
 
-    it("should verify correct password", async () => {
-      const password = "securePassword123";
-      const hash = await bcrypt.hash(password, 12);
-
-      const isValid = await bcrypt.compare(password, hash);
+  describe("verifyPassword", () => {
+    it("should return true for correct password", async () => {
+      const hash = await bcrypt.hash("password123", 10);
+      const isValid = await authService.verifyPassword("password123", hash);
       expect(isValid).toBe(true);
     });
 
-    it("should reject incorrect password", async () => {
-      const password = "securePassword123";
-      const wrongPassword = "wrongPassword456";
-      const hash = await bcrypt.hash(password, 12);
-
-      const isValid = await bcrypt.compare(wrongPassword, hash);
+    it("should return false for incorrect password", async () => {
+      const hash = await bcrypt.hash("password123", 10);
+      const isValid = await authService.verifyPassword("wrong", hash);
       expect(isValid).toBe(false);
     });
+  });
 
-    it("should generate different hashes for same password", async () => {
-      const password = "securePassword123";
-      const hash1 = await bcrypt.hash(password, 12);
-      const hash2 = await bcrypt.hash(password, 12);
-
-      expect(hash1).not.toBe(hash2);
-      // Both should still verify correctly
-      expect(await bcrypt.compare(password, hash1)).toBe(true);
-      expect(await bcrypt.compare(password, hash2)).toBe(true);
+  describe("generateToken", () => {
+    it("should generate valid JWT", () => {
+      const user = { id: "u-1", email: "test@example.com", role: "USER" };
+      const token = authService.generateToken(user);
+      const decoded = jwt.verify(token, "test-secret");
+      expect(decoded.sub).toBe("u-1");
+      expect(decoded.email).toBe("test@example.com");
     });
   });
 
-  describe("JWT token generation", () => {
-    const generateToken = (user) => {
-      return jwt.sign(
-        {
-          sub: user.id,
-          email: user.email,
-          role: user.role,
-        },
-        JWT_SECRET,
-        { expiresIn: "24h" }
-      );
-    };
+  describe("registerUser", () => {
+    it("should register new user", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({ id: "new-user" });
 
-    it("should generate a valid JWT token", () => {
-      const user = {
-        id: "user-123",
-        email: "test@example.com",
-        role: "CUSTOMER",
-      };
+      const result = await authService.registerUser({
+        email: "new@example.com",
+        password: "pw",
+      });
 
-      const token = generateToken(user);
-
-      expect(token).toBeDefined();
-      expect(typeof token).toBe("string");
-      expect(token.split(".")).toHaveLength(3);
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: "new@example.com" },
+      });
+      expect(mockPrisma.user.create).toHaveBeenCalled(); // tx.user.create
+      expect(result).toEqual({ id: "new-user" });
     });
 
-    it("should include user data in token payload", () => {
-      const user = {
-        id: "user-123",
-        email: "test@example.com",
-        role: "CUSTOMER",
-      };
+    it("should fail if email exists", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: "existing" });
 
-      const token = generateToken(user);
-      const payload = jwt.verify(token, JWT_SECRET);
-
-      expect(payload.sub).toBe(user.id);
-      expect(payload.email).toBe(user.email);
-      expect(payload.role).toBe(user.role);
-    });
-
-    it("should set expiration time", () => {
-      const user = {
-        id: "user-123",
-        email: "test@example.com",
-        role: "CUSTOMER",
-      };
-
-      const token = generateToken(user);
-      const payload = jwt.verify(token, JWT_SECRET);
-
-      expect(payload.exp).toBeDefined();
-      expect(payload.iat).toBeDefined();
-      expect(payload.exp).toBeGreaterThan(payload.iat);
-    });
-
-    it("should fail verification with wrong secret", () => {
-      const user = {
-        id: "user-123",
-        email: "test@example.com",
-        role: "CUSTOMER",
-      };
-
-      const token = generateToken(user);
-
-      expect(() => {
-        jwt.verify(token, "wrong-secret");
-      }).toThrow();
+      await expect(
+        authService.registerUser({ email: "exist@example.com", password: "pw" })
+      ).rejects.toThrow("Email already registered");
     });
   });
 
-  describe("email validation", () => {
-    const isValidEmail = (email) => {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(email);
-    };
+  describe("authenticateUser", () => {
+    it("should return user if credentials are valid", async () => {
+      const hash = await bcrypt.hash("pw", 10);
+      const user = { id: "u-1", passwordHash: hash, account: { status: "ACTIVE" } };
+      mockPrisma.user.findUnique.mockResolvedValue(user);
 
-    it("should validate correct email formats", () => {
-      expect(isValidEmail("test@example.com")).toBe(true);
-      expect(isValidEmail("user.name@domain.org")).toBe(true);
-      expect(isValidEmail("user+tag@sub.domain.com")).toBe(true);
+      const result = await authService.authenticateUser({
+        email: "test@example.com",
+        password: "pw",
+      });
+      expect(result).toBe(user);
     });
 
-    it("should reject invalid email formats", () => {
-      expect(isValidEmail("")).toBe(false);
-      expect(isValidEmail("notanemail")).toBe(false);
-      expect(isValidEmail("@nodomain.com")).toBe(false);
-      expect(isValidEmail("missing@.com")).toBe(false);
-      expect(isValidEmail("spaces in@email.com")).toBe(false);
+    it("should fail if user not found", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        authService.authenticateUser({ email: "none@example.com", password: "pw" })
+      ).rejects.toThrow("Invalid email or password");
+    });
+
+    it("should fail if password invalid", async () => {
+      const hash = await bcrypt.hash("pw", 10);
+      const user = { id: "u-1", passwordHash: hash };
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+
+      await expect(
+        authService.authenticateUser({ email: "test@example.com", password: "wrong" })
+      ).rejects.toThrow("Invalid email or password");
+    });
+
+    it("should fail if account frozen", async () => {
+      const hash = await bcrypt.hash("pw", 10);
+      const user = { 
+        id: "u-1", 
+        passwordHash: hash, 
+        account: { status: "FROZEN" } 
+      };
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+
+      await expect(
+        authService.authenticateUser({ email: "test@example.com", password: "pw" })
+      ).rejects.toThrow("Account is frozen");
     });
   });
 
-  describe("password validation", () => {
-    const isValidPassword = (password) => {
-      if (password === undefined || password === null) {
-        return false;
-      }
-      return password.length >= 8 && password.length <= 128;
-    };
-
-    it("should accept valid passwords", () => {
-      expect(isValidPassword("12345678")).toBe(true);
-      expect(isValidPassword("securePassword123!")).toBe(true);
-      expect(isValidPassword("a".repeat(128))).toBe(true);
-    });
-
-    it("should reject short passwords", () => {
-      expect(isValidPassword("")).toBe(false);
-      expect(isValidPassword("1234567")).toBe(false);
-    });
-
-    it("should reject too long passwords", () => {
-      expect(isValidPassword("a".repeat(129))).toBe(false);
-    });
-
-    it("should reject undefined/null passwords", () => {
-      expect(isValidPassword(undefined)).toBe(false);
-      expect(isValidPassword(null)).toBe(false);
+  describe("getUserById", () => {
+    it("should return user", async () => {
+      const user = { id: "u-1" };
+      mockPrisma.user.findUnique.mockResolvedValue(user);
+      const result = await authService.getUserById("u-1");
+      expect(result).toBe(user);
     });
   });
 });

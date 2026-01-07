@@ -32,8 +32,9 @@ export function assertWalletActive(wallet) {
  * @throws {DomainError} If amount is invalid or insufficient funds
  */
 export function canDebit(wallet, amount) {
-  const amountMoney = money(amount, wallet.currency);
-  const balanceMoney = money(wallet.balance, wallet.currency);
+  const currency = wallet.currency || "USD";
+  const amountMoney = money(amount, currency);
+  const balanceMoney = money(wallet.balance, currency);
 
   if (amountMoney.isNegative() || amountMoney.isZero()) {
     throw new DomainError(

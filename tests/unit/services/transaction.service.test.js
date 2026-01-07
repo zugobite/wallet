@@ -1,225 +1,318 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-/**
- * Transaction Service Tests
- *
- * Unit tests for transaction service business logic.
- */
+const { mockPrisma, mockWalletRepo, mockTxRepo, mockLedgerRepo } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
+    },
+    mockWalletRepo: {
+      findWalletByIdAndAccountTx: vi.fn(),
+      updateWalletBalance: vi.fn(),
+    },
+    mockTxRepo: {
+      findByReferenceTx: vi.fn(),
+      createTransaction: vi.fn(),
+      findByIdTx: vi.fn(),
+      updateTransactionStatus: vi.fn(),
+    },
+    mockLedgerRepo: {
+      createLedgerEntry: vi.fn(),
+    },
+  };
+});
 
-describe("Transaction Service Logic", () => {
-  describe("authorize validation", () => {
-    const validateAuthorize = (params, walletBalance) => {
-      const errors = [];
+vi.mock("../../../src/infra/prisma.mjs", () => ({
+  prisma: mockPrisma,
+}));
 
-      if (!params.walletId) {
-        errors.push({ field: "walletId", message: "Wallet ID is required" });
-      }
+vi.mock("../../../src/infra/repositories/wallet.repo.mjs", () => mockWalletRepo);
+vi.mock("../../../src/infra/repositories/transactions.repo.mjs", () => mockTxRepo);
+vi.mock("../../../src/infra/repositories/ledger.repo.mjs", () => mockLedgerRepo);
 
-      if (params.amount === undefined || params.amount <= 0) {
-        errors.push({
-          field: "amount",
-          message: "Amount must be a positive integer",
-        });
-      } else if (walletBalance !== undefined && params.amount > walletBalance) {
-        errors.push({ field: "amount", message: "Insufficient funds" });
-      }
+import * as txService from "../../../src/services/transaction.service.mjs";
 
-      if (!params.referenceId) {
-        errors.push({
-          field: "referenceId",
-          message: "Reference ID is required",
-        });
-      }
+describe("Transaction Service", () => {
+  const accountId = "acc-1";
+  const walletId = "wal-1";
+  const mockWallet = { 
+    id: walletId, 
+    accountId,
+    balance: 1000, 
+    currency: "USD",
+    account: { status: "ACTIVE" } 
+  };
 
-      return { valid: errors.length === 0, errors };
-    };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (cb) => cb(mockPrisma));
+  });
 
-    it("should validate correct authorize params", () => {
-      const result = validateAuthorize(
-        { walletId: "w", amount: 500, referenceId: "r" },
-        1000
+  describe("authorize", () => {
+    const params = { walletId, accountId, amount: 100, referenceId: "ref-1" };
+
+    it("should create authorize transaction (pending)", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+      mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+      mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-1" });
+
+      const result = await txService.authorize(params);
+      
+      expect(mockTxRepo.createTransaction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ type: "authorize", status: "pending" })
       );
-      expect(result.valid).toBe(true);
+      expect(result.transaction.id).toBe("tx-1");
     });
 
-    it("should reject amount exceeding balance", () => {
-      const result = validateAuthorize(
-        { walletId: "w", amount: 1500, referenceId: "r" },
-        1000
+    it("should fail if wallet not found", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(null);
+      await expect(txService.authorize(params)).rejects.toThrow("Wallet not found");
+    });
+
+    it("should fail if insufficient funds", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue({ 
+        ...mockWallet, 
+        balance: 50 
+      });
+      await expect(txService.authorize(params)).rejects.toThrow("Insufficient funds");
+    });
+
+    it("should fail if duplicate reference", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+      mockTxRepo.findByReferenceTx.mockResolvedValue({ id: "dupe" });
+      await expect(txService.authorize(params)).rejects.toThrow("Duplicate reference ID");
+    });
+  });
+
+  describe("debit", () => {
+    const params = { walletId, accountId, amount: 100, referenceId: "ref-d" };
+
+    it("should debit wallet and create completion records", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+      mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+      mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...mockWallet, balance: 900 });
+      mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-d" });
+
+      const result = await txService.debit(params);
+
+      // Verify balance update
+      expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+        expect.anything(),
+        mockWallet,
+        900
       );
-      expect(result.valid).toBe(false);
+      // Verify transaction creation
+      expect(mockTxRepo.createTransaction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ type: "debit", status: "completed" })
+      );
+      // Verify ledger entry
+      expect(mockLedgerRepo.createLedgerEntry).toHaveBeenCalled();
+      
+      expect(result.wallet.balance).toBe(900);
+    });
+
+    it("should use default USD currency if missing", async () => {
+      const walletNoCurrency = { ...mockWallet, currency: null };
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(walletNoCurrency);
+      mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+      mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...walletNoCurrency, balance: 900 });
+      mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-d" });
+
+      const result = await txService.debit(params);
+      expect(result.wallet.balance).toBe(900);
+    });
+
+    it("should fail duplicate reference", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+      mockTxRepo.findByReferenceTx.mockResolvedValue({ id: "dupe" });
+      await expect(txService.debit(params)).rejects.toThrow("Duplicate reference ID");
+    });
+
+    it("should fail if wallet not found", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(null);
+        await expect(txService.debit(params)).rejects.toThrow("Wallet not found");
     });
   });
 
-  describe("debit validation", () => {
-    const validateDebit = (params, walletBalance) => {
-      const errors = [];
+  describe("credit", () => {
+    const params = { walletId, accountId, amount: 100, referenceId: "ref-c" };
 
-      if (params.amount > walletBalance) {
-        errors.push({ field: "amount", message: "Insufficient funds" });
-      }
+    it("should credit wallet and create completion records", async () => {
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+      mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+      mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...mockWallet, balance: 1100 });
+      mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-c" });
 
-      return { valid: errors.length === 0, errors };
-    };
+      const result = await txService.credit(params);
 
-    it("should allow debit within balance", () => {
-      expect(validateDebit({ amount: 500 }, 1000).valid).toBe(true);
+      expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+        expect.anything(),
+        mockWallet,
+        1100
+      );
+      expect(mockTxRepo.createTransaction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ type: "credit", status: "completed" })
+      );
+      expect(mockLedgerRepo.createLedgerEntry).toHaveBeenCalled();
     });
 
-    it("should reject debit exceeding balance", () => {
-      expect(validateDebit({ amount: 1500 }, 1000).valid).toBe(false);
+    it("should use default USD currency if missing", async () => {
+      const walletNoCurrency = { ...mockWallet, currency: null };
+      mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(walletNoCurrency);
+      mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+      mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...walletNoCurrency, balance: 1100 });
+      mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-c" });
+
+      const result = await txService.credit(params);
+      expect(result.wallet.balance).toBe(1100);
+    });
+
+    it("should fail duplicate reference", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+        mockTxRepo.findByReferenceTx.mockResolvedValue({ id: "dupe" });
+        await expect(txService.credit(params)).rejects.toThrow("Duplicate reference ID");
+    });
+
+    it("should fail if wallet not found", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(null);
+        await expect(txService.credit(params)).rejects.toThrow("Wallet not found");
     });
   });
 
-  describe("credit validation", () => {
-    const validateCredit = (params) => {
-      const errors = [];
+  describe("reverse (pending)", () => {
+    const params = { transactionId: "tx-1", accountId };
 
-      if (params.amount <= 0) {
-        errors.push({
-          field: "amount",
-          message: "Amount must be positive",
+    it("should update status to reversed", async () => {
+      mockTxRepo.findByIdTx.mockResolvedValue({ 
+        id: "tx-1", 
+        status: "pending", 
+        wallet: { accountId } 
+      });
+      mockTxRepo.updateTransactionStatus.mockResolvedValue({ id: "tx-1", status: "reversed" });
+
+      const result = await txService.reverse(params);
+      expect(mockTxRepo.updateTransactionStatus).toHaveBeenCalledWith(
+        expect.anything(),
+        "tx-1",
+        "reversed"
+      );
+      expect(result.transaction.status).toBe("reversed");
+    });
+
+    it("should fail if not pending", async () => {
+      mockTxRepo.findByIdTx.mockResolvedValue({ 
+        id: "tx-1", 
+        status: "completed", 
+        wallet: { accountId } 
+      });
+      await expect(txService.reverse(params)).rejects.toThrow("Transaction is not pending");
+    });
+
+    it("should fail if transaction not found", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue(null);
+        await expect(txService.reverse(params)).rejects.toThrow("Transaction not found");
+    });
+
+    it("should fail if not owner", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue({ 
+            id: "tx-1", 
+            wallet: { accountId: "other-account" } 
         });
-      }
-
-      return { valid: errors.length === 0, errors };
-    };
-
-    it("should accept positive amounts", () => {
-      expect(validateCredit({ amount: 1000 }).valid).toBe(true);
-    });
-
-    it("should reject zero or negative amounts", () => {
-      expect(validateCredit({ amount: 0 }).valid).toBe(false);
-      expect(validateCredit({ amount: -100 }).valid).toBe(false);
+        await expect(txService.reverse(params)).rejects.toThrow("Transaction not found");
     });
   });
 
-  describe("reverse validation", () => {
-    const validateReverse = (transaction) => {
-      if (!transaction) {
-        return { valid: false, code: "TRANSACTION_NOT_FOUND" };
-      }
+  describe("adminReverse", () => {
+    const params = { transactionId: "tx-1", adminId: "a-1", reason: "mistake" };
 
-      if (transaction.status === "reversed") {
-        return { valid: false, code: "ALREADY_REVERSED" };
-      }
-
-      if (transaction.status !== "completed") {
-        return { valid: false, code: "INVALID_STATUS" };
-      }
-
-      return { valid: true };
-    };
-
-    it("should allow reversing completed transaction", () => {
-      const tx = { id: "tx-1", status: "completed", type: "debit" };
-      expect(validateReverse(tx).valid).toBe(true);
+    it("should satisfy the requirements and fail if already reversed", async () => {
+      mockTxRepo.findByIdTx.mockResolvedValue({ status: "reversed" });
+      await expect(txService.adminReverse(params)).rejects.toThrow("Transaction already reversed");
     });
 
-    it("should reject reversing already reversed transaction", () => {
-      const tx = { id: "tx-1", status: "reversed", type: "debit" };
-      const result = validateReverse(tx);
-      expect(result.valid).toBe(false);
-      expect(result.code).toBe("ALREADY_REVERSED");
+    it("should fail if not completed", async () => {
+      mockTxRepo.findByIdTx.mockResolvedValue({ status: "pending" });
+      await expect(txService.adminReverse(params)).rejects.toThrow("Only completed transactions can be reversed");
     });
 
-    it("should reject reversing pending transaction", () => {
-      const tx = { id: "tx-1", status: "pending", type: "authorize" };
-      const result = validateReverse(tx);
-      expect(result.valid).toBe(false);
-      expect(result.code).toBe("INVALID_STATUS");
+    // Valid admin reverse of DEBIT (so we Credit back)
+    it("should reverse a debit transaction", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue({ 
+            id: "tx-1", 
+            amount: 100,
+            type: "debit",
+            status: "completed", 
+            referenceId: "ref-orig",
+            wallet: mockWallet 
+        });
+        
+        mockWalletRepo.updateWalletBalance.mockResolvedValue(mockWallet);
+        mockTxRepo.createTransaction.mockResolvedValue({ id: "rev-tx-1" });
+
+        await txService.adminReverse(params);
+
+        // Check balance update (credit back)
+        expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+            expect.anything(),
+            mockWallet,
+            1100 // 1000 + 100
+        );
+        // Check reversal tx created
+        expect(mockTxRepo.createTransaction).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ type: "reverse", referenceId: "REV-ref-orig" })
+        );
     });
 
-    it("should reject null transaction", () => {
-      const result = validateReverse(null);
-      expect(result.valid).toBe(false);
-      expect(result.code).toBe("TRANSACTION_NOT_FOUND");
-    });
-  });
+    // Valid admin reverse of CREDIT (so we Debit back)
+    it("should reverse a credit transaction", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue({ 
+            id: "tx-1", 
+            amount: 100,
+            type: "credit",
+            status: "completed", 
+            referenceId: "ref-orig",
+            wallet: mockWallet 
+        });
 
-  describe("reversal balance calculation", () => {
-    const calculateReversalBalance = (transaction, currentBalance) => {
-      if (transaction.type === "debit") {
-        // Debit was subtracted, add it back
-        return currentBalance + transaction.amount;
-      } else if (transaction.type === "credit") {
-        // Credit was added, subtract it
-        return currentBalance - transaction.amount;
-      }
-      return null; // Cannot reverse other types
-    };
+        await txService.adminReverse(params);
 
-    it("should restore balance for reversed debit", () => {
-      const tx = { type: "debit", amount: 500 };
-      const currentBalance = 500;
-      const newBalance = calculateReversalBalance(tx, currentBalance);
-      expect(newBalance).toBe(1000);
+        // Check balance update (debit back)
+        expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+            expect.anything(),
+            mockWallet,
+            900 // 1000 - 100
+        );
     });
 
-    it("should reduce balance for reversed credit", () => {
-      const tx = { type: "credit", amount: 500 };
-      const currentBalance = 1500;
-      const newBalance = calculateReversalBalance(tx, currentBalance);
-      expect(newBalance).toBe(1000);
+    it("should fail reverse credit if insufficient funds", async () => {
+        const poorWallet = { ...mockWallet, balance: 50 };
+        mockTxRepo.findByIdTx.mockResolvedValue({ 
+            id: "tx-1", 
+            amount: 100,
+            type: "credit",
+            status: "completed", 
+            wallet: poorWallet 
+        });
+
+        await expect(txService.adminReverse(params)).rejects.toThrow("Insufficient balance");
     });
 
-    it("should return null for non-reversible types", () => {
-      const tx = { type: "authorize", amount: 500 };
-      const newBalance = calculateReversalBalance(tx, 1000);
-      expect(newBalance).toBe(null);
-    });
-  });
-
-  describe("duplicate reference detection", () => {
-    const checkDuplicate = (referenceId, existingRefs) => {
-      return existingRefs.includes(referenceId);
-    };
-
-    it("should detect duplicate reference", () => {
-      const existingRefs = ["ref-001", "ref-002", "ref-003"];
-      expect(checkDuplicate("ref-002", existingRefs)).toBe(true);
+    it("should fail if transaction not found", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue(null);
+        await expect(txService.adminReverse(params)).rejects.toThrow("Transaction not found");
     });
 
-    it("should allow new reference", () => {
-      const existingRefs = ["ref-001", "ref-002", "ref-003"];
-      expect(checkDuplicate("ref-004", existingRefs)).toBe(false);
-    });
-  });
-
-  describe("ledger entry generation", () => {
-    const createLedgerData = (transaction, wallet, newBalance) => {
-      return {
-        transactionId: transaction.id,
-        direction: transaction.type === "debit" ? "debit" : "credit",
-        amount: transaction.amount,
-        balanceBefore: wallet.balance,
-        balanceAfter: newBalance,
-      };
-    };
-
-    it("should create correct debit ledger entry", () => {
-      const tx = { id: "tx-1", type: "debit", amount: 500 };
-      const wallet = { balance: 1000 };
-      const newBalance = 500;
-
-      const ledger = createLedgerData(tx, wallet, newBalance);
-
-      expect(ledger.direction).toBe("debit");
-      expect(ledger.balanceBefore).toBe(1000);
-      expect(ledger.balanceAfter).toBe(500);
-    });
-
-    it("should create correct credit ledger entry", () => {
-      const tx = { id: "tx-1", type: "credit", amount: 500 };
-      const wallet = { balance: 1000 };
-      const newBalance = 1500;
-
-      const ledger = createLedgerData(tx, wallet, newBalance);
-
-      expect(ledger.direction).toBe("credit");
-      expect(ledger.balanceBefore).toBe(1000);
-      expect(ledger.balanceAfter).toBe(1500);
+    it("should fail if unknown transaction type", async () => {
+        mockTxRepo.findByIdTx.mockResolvedValue({ 
+            id: "tx-1", 
+            type: "unknown",
+            status: "completed",
+            wallet: mockWallet
+        });
+        await expect(txService.adminReverse(params)).rejects.toThrow("Cannot reverse this transaction type");
     });
   });
 });

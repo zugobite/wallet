@@ -1,189 +1,238 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-/**
- * Wallet Service Tests
- *
- * Unit tests for wallet service business logic.
- */
+const { mockPrisma, mockWalletRepo, mockTxRepo, mockLedgerRepo } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      $transaction: vi.fn((callback) => callback(mockPrisma)),
+    },
+    mockWalletRepo: {
+      findWalletByIdAndAccount: vi.fn(),
+      findWalletByIdAndAccountTx: vi.fn(),
+      updateWalletBalance: vi.fn(),
+    },
+    mockTxRepo: {
+      findByReferenceTx: vi.fn(),
+      createTransaction: vi.fn(), // Fixed name from createTransactionTx
+      createTransactionTx: vi.fn(), 
+      countByWalletId: vi.fn(),
+      findByWalletId: vi.fn(),
+    },
+    mockLedgerRepo: {
+      createLedgerEntry: vi.fn(),
+      createEntryTx: vi.fn(),
+    },
+  };
+});
 
-describe("Wallet Service Logic", () => {
-  describe("deposit validation", () => {
-    const validateDeposit = (params) => {
-      const errors = [];
+vi.mock("../../../src/infra/prisma.mjs", () => ({
+  prisma: mockPrisma,
+}));
 
-      if (!params.walletId) {
-        errors.push({ field: "walletId", message: "Wallet ID is required" });
-      }
+vi.mock("../../../src/infra/repositories/wallet.repo.mjs", () => mockWalletRepo);
+vi.mock("../../../src/infra/repositories/transactions.repo.mjs", () => mockTxRepo);
+vi.mock("../../../src/infra/repositories/ledger.repo.mjs", () => mockLedgerRepo);
 
-      if (!params.accountId) {
-        errors.push({ field: "accountId", message: "Account ID is required" });
-      }
+import * as walletService from "../../../src/services/wallet.service.mjs";
 
-      if (params.amount === undefined || params.amount <= 0) {
-        errors.push({
-          field: "amount",
-          message: "Amount must be a positive integer",
-        });
-      }
-
-      if (!params.referenceId) {
-        errors.push({
-          field: "referenceId",
-          message: "Reference ID is required",
-        });
-      }
-
-      return { valid: errors.length === 0, errors };
-    };
-
-    it("should validate correct deposit params", () => {
-      const result = validateDeposit({
-        walletId: "wallet-123",
-        accountId: "account-123",
-        amount: 1000,
-        referenceId: "ref-123",
-      });
-      expect(result.valid).toBe(true);
-    });
-
-    it("should reject missing walletId", () => {
-      const result = validateDeposit({
-        accountId: "account-123",
-        amount: 1000,
-        referenceId: "ref-123",
-      });
-      expect(result.valid).toBe(false);
-    });
-
-    it("should reject zero or negative amount", () => {
-      expect(
-        validateDeposit({
-          walletId: "w",
-          accountId: "a",
-          amount: 0,
-          referenceId: "r",
-        }).valid
-      ).toBe(false);
-
-      expect(
-        validateDeposit({
-          walletId: "w",
-          accountId: "a",
-          amount: -100,
-          referenceId: "r",
-        }).valid
-      ).toBe(false);
+describe("Wallet Service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Re-bind the transaction mock if needed, but the hoisted one should work
+    // We can't access mockPrisma inside the hoisted factory recursively easily,
+    // so we trust the setup.
+    mockPrisma.$transaction.mockImplementation(async (cb) => {
+       // Pass a dummy object representing the tx client, 
+       // but since our repo mocks are global, we just need to ensure the callback runs.
+       return cb(mockPrisma);
     });
   });
 
-  describe("withdraw validation", () => {
-    const validateWithdraw = (params, walletBalance) => {
-      const errors = [];
+  describe("getWallet", () => {
+    const walletId = "wallet-1";
+    const accountId = "account-1";
 
-      if (!params.walletId) {
-        errors.push({ field: "walletId", message: "Wallet ID is required" });
-      }
+    it("should return wallet if found", async () => {
+      const mockWallet = { id: walletId, balance: 100 };
+      mockWalletRepo.findWalletByIdAndAccount.mockResolvedValue(mockWallet);
 
-      if (params.amount === undefined || params.amount <= 0) {
-        errors.push({
-          field: "amount",
-          message: "Amount must be a positive integer",
-        });
-      } else if (walletBalance !== undefined && params.amount > walletBalance) {
-        errors.push({ field: "amount", message: "Insufficient funds" });
-      }
-
-      if (!params.referenceId) {
-        errors.push({
-          field: "referenceId",
-          message: "Reference ID is required",
-        });
-      }
-
-      return { valid: errors.length === 0, errors };
-    };
-
-    it("should validate correct withdraw params with sufficient balance", () => {
-      const result = validateWithdraw(
-        { walletId: "w", accountId: "a", amount: 500, referenceId: "r" },
-        1000
-      );
-      expect(result.valid).toBe(true);
+      const result = await walletService.getWallet(walletId, accountId);
+      expect(result).toBe(mockWallet);
+      expect(mockWalletRepo.findWalletByIdAndAccount).toHaveBeenCalledWith(walletId, accountId);
     });
 
-    it("should reject insufficient balance", () => {
-      const result = validateWithdraw(
-        { walletId: "w", accountId: "a", amount: 1500, referenceId: "r" },
-        1000
-      );
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContainEqual({
-        field: "amount",
-        message: "Insufficient funds",
-      });
-    });
+    it("should throw 404 if not found", async () => {
+      mockWalletRepo.findWalletByIdAndAccount.mockResolvedValue(null);
 
-    it("should allow exact balance withdrawal", () => {
-      const result = validateWithdraw(
-        { walletId: "w", accountId: "a", amount: 1000, referenceId: "r" },
-        1000
-      );
-      expect(result.valid).toBe(true);
+      await expect(walletService.getWallet(walletId, accountId))
+        .rejects.toThrow("Wallet not found");
     });
   });
 
-  describe("balance calculation", () => {
-    it("should calculate deposit correctly", () => {
-      const currentBalance = 1000;
-      const depositAmount = 500;
-      const newBalance = currentBalance + depositAmount;
-      expect(newBalance).toBe(1500);
-    });
+  describe("getBalance", () => {
+    const walletId = "wallet-1";
+    const accountId = "account-1";
 
-    it("should calculate withdrawal correctly", () => {
-      const currentBalance = 1000;
-      const withdrawAmount = 300;
-      const newBalance = currentBalance - withdrawAmount;
-      expect(newBalance).toBe(700);
-    });
+    it("should return formatted balance", async () => {
+        const mockWallet = { id: walletId, balance: 500, currency: "USD" };
+        mockWalletRepo.findWalletByIdAndAccount.mockResolvedValue(mockWallet);
 
-    it("should handle multiple operations", () => {
-      let balance = 0;
-      balance += 1000; // deposit
-      balance -= 200; // withdraw
-      balance += 500; // deposit
-      balance -= 100; // withdraw
-      expect(balance).toBe(1200);
+        const result = await walletService.getBalance(walletId, accountId);
+        expect(result).toEqual({
+            walletId,
+            currency: "USD",
+            balance: 500,
+            availableBalance: 500
+        });
     });
   });
 
-  describe("ownership validation", () => {
-    const validateOwnership = (wallet, accountId) => {
-      if (!wallet) {
-        return { valid: false, error: "WALLET_NOT_FOUND" };
-      }
-      if (wallet.accountId !== accountId) {
-        return { valid: false, error: "WALLET_NOT_FOUND" };
-      }
-      return { valid: true };
+  describe("deposit", () => {
+    const params = {
+      walletId: "w-1",
+      accountId: "a-1",
+      amount: 100,
+      referenceId: "ref-1",
     };
 
-    it("should allow access to owned wallet", () => {
-      const wallet = { id: "w-1", accountId: "acc-123" };
-      const result = validateOwnership(wallet, "acc-123");
-      expect(result.valid).toBe(true);
+    const mockWallet = { 
+        id: "w-1", 
+        balance: 1000, 
+        currency: "USD",
+        account: { status: "ACTIVE" } 
+    };
+
+    beforeEach(() => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+        mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+        mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...mockWallet, balance: 1100 });
+        mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-1", status: "COMPLETED" });
     });
 
-    it("should deny access to wallet with different account", () => {
-      const wallet = { id: "w-1", accountId: "acc-123" };
-      const result = validateOwnership(wallet, "acc-456");
-      expect(result.valid).toBe(false);
+    it("should process deposit successfully", async () => {
+        const result = await walletService.deposit(params);
+
+        expect(mockWalletRepo.findWalletByIdAndAccountTx).toHaveBeenCalled();
+        expect(mockTxRepo.findByReferenceTx).toHaveBeenCalled();
+        expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+            expect.anything(),
+            mockWallet,
+            1100 // 1000 + 100
+        );
+        expect(mockTxRepo.createTransaction).toHaveBeenCalled(); 
+        expect(mockLedgerRepo.createLedgerEntry).toHaveBeenCalled();
+        expect(result.transaction.status).toBe("COMPLETED");
     });
 
-    it("should return not found for null wallet", () => {
-      const result = validateOwnership(null, "acc-123");
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("WALLET_NOT_FOUND");
+    it("should throw if wallet not found", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(null);
+        await expect(walletService.deposit(params))
+            .rejects.toThrow("Wallet not found");
+    });
+
+    it("should throw if account is frozen", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue({
+            ...mockWallet,
+            account: { status: "FROZEN" }
+        });
+        await expect(walletService.deposit(params))
+            .rejects.toThrow("Account is frozen");
+    });
+
+    it("should throw if duplicate reference", async () => {
+        mockTxRepo.findByReferenceTx.mockResolvedValue({ id: "tx-existing" });
+        await expect(walletService.deposit(params))
+            .rejects.toThrow("Duplicate reference ID");
+    });
+  });
+
+  describe("withdraw", () => {
+    const params = {
+      walletId: "w-1",
+      accountId: "a-1",
+      amount: 100,
+      referenceId: "ref-1",
+    };
+
+    const mockWallet = { 
+        id: "w-1", 
+        balance: 1000, 
+        currency: "USD",
+        account: { status: "ACTIVE" } 
+    };
+
+    beforeEach(() => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(mockWallet);
+        mockTxRepo.findByReferenceTx.mockResolvedValue(null);
+        mockWalletRepo.updateWalletBalance.mockResolvedValue({ ...mockWallet, balance: 900 });
+        mockTxRepo.createTransaction.mockResolvedValue({ id: "tx-2", status: "COMPLETED" });
+    });
+
+    it("should process withdraw successfully", async () => {
+        const result = await walletService.withdraw(params);
+
+        expect(mockWalletRepo.updateWalletBalance).toHaveBeenCalledWith(
+            expect.anything(),
+            mockWallet,
+            900 // 1000 - 100
+        );
+        expect(result.transaction.id).toBe("tx-2");
+    });
+
+    it("should fail if duplicate reference", async () => {
+        mockTxRepo.findByReferenceTx.mockResolvedValue({ id: "tx-existing" });
+        await expect(walletService.withdraw(params))
+            .rejects.toThrow("Duplicate reference ID");
+    });
+
+    it("should fail if insufficient funds", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue({ 
+            ...mockWallet, 
+            balance: 50 // less than 100
+        });
+        
+        await expect(walletService.withdraw(params))
+            .rejects.toThrow("Insufficient funds");
+    });
+
+    it("should fail if wallet not found", async () => {
+        mockWalletRepo.findWalletByIdAndAccountTx.mockResolvedValue(null);
+        await expect(walletService.withdraw(params))
+            .rejects.toThrow("Wallet not found");
+    });
+  });
+
+  describe("getTransactions", () => {
+    const walletId = "w-1";
+    const accountId = "a-1";
+    const mockWallet = { id: walletId, accountId };
+
+    beforeEach(() => {
+        mockWalletRepo.findWalletByIdAndAccount.mockResolvedValue(mockWallet);
+    });
+
+    it("should return transactions with pagination", async () => {
+        mockTxRepo.countByWalletId.mockResolvedValue(55);
+        mockTxRepo.findByWalletId.mockResolvedValue([{ id: "tx-1" }, { id: "tx-2" }]);
+
+        const result = await walletService.getTransactions(walletId, accountId, { page: 2, limit: 10 });
+
+        expect(result).toEqual({
+            transactions: [{ id: "tx-1" }, { id: "tx-2" }],
+            pagination: {
+                total: 55,
+                page: 2,
+                limit: 10,
+                totalPages: 6,
+                hasNext: true,
+                hasPrev: true
+            }
+        });
+    });
+
+    it("should throw if wallet not found", async () => {
+        mockWalletRepo.findWalletByIdAndAccount.mockResolvedValue(null);
+        await expect(walletService.getTransactions(walletId, accountId))
+            .rejects.toThrow("Wallet not found");
     });
   });
 });

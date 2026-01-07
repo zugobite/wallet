@@ -1,4 +1,3 @@
-import { describe, it, expect } from "@jest/globals";
 import { canonicalJson } from "../../../src/utlis/canonicalJson.mjs";
 
 describe("canonicalJson", () => {

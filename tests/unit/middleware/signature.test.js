@@ -1,235 +1,130 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import crypto from "crypto";
-import { describe, it, expect } from "@jest/globals";
+import { canonicalJson } from "../../../src/utlis/canonicalJson.mjs";
 
-/**
- * Signature Middleware Tests
- *
- * These are simplified unit tests that verify the signature logic
- * without importing the actual middleware (which has Redis dependencies).
- */
+const { mockRedis } = vi.hoisted(() => ({
+    mockRedis: {
+        get: vi.fn(),
+        set: vi.fn(),
+    }
+}));
 
-describe("Signature Logic", () => {
-  const REQUEST_SIGNING_SECRET = "test-signing-secret";
-  const SIGNATURE_TTL_MS = 300000; // 5 minutes
+vi.mock("../../../src/infra/redis.mjs", () => ({ redis: mockRedis }));
 
-  describe("header validation", () => {
-    const validateHeaders = (headers) => {
-      const { signature, version, timestamp, nonce } = headers;
-      if (!signature || !version || !timestamp || !nonce) {
-        return { valid: false, error: "Missing signature headers" };
-      }
-      if (version !== "v1") {
-        return { valid: false, error: "Unsupported signature version" };
-      }
-      return { valid: true };
+import signatureMiddleware from "../../../src/middleware/signature.mjs";
+
+describe("Signature Middleware", () => {
+    let req, res, next;
+    const SECRET = "test-secret";
+    
+    beforeEach(() => {
+        vi.clearAllMocks();
+        process.env.REQUEST_SIGNING_SECRET = SECRET;
+        process.env.SIGNATURE_TTL_MS = "300000"; // 5 min
+        
+        req = {
+            method: "POST",
+            originalUrl: "/api/test",
+            headers: {
+                "x-signature-version": "v1",
+                "x-timestamp": Date.now().toString(),
+                "x-nonce": "nonce-1"
+            },
+            body: { key: "value", a: "1" }
+        };
+        res = {
+            status: vi.fn().mockReturnThis(),
+            json: vi.fn()
+        };
+        next = vi.fn();
+    });
+
+    const generateSignature = (req, secret) => {
+        const payload = [
+            req.method.toUpperCase(),
+            req.originalUrl,
+            req.headers["x-timestamp"],
+            req.headers["x-nonce"],
+            canonicalJson(req.body)
+        ].join("|");
+        
+        return crypto
+            .createHmac("sha256", secret)
+            .update(payload)
+            .digest("hex");
     };
 
-    it("should return error when signature is missing", () => {
-      const result = validateHeaders({
-        version: "v1",
-        timestamp: Date.now().toString(),
-        nonce: "nonce-123",
-      });
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Missing signature headers");
+    it("should reject missing headers", async () => {
+        req.headers = {};
+        await signatureMiddleware(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: "Missing signature headers" });
     });
 
-    it("should return error when version is missing", () => {
-      const result = validateHeaders({
-        signature: "somesig",
-        timestamp: Date.now().toString(),
-        nonce: "nonce-123",
-      });
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Missing signature headers");
+    it("should reject unsupported version", async () => {
+        req.headers["x-signature-version"] = "v2";
+        // Signature presence required to pass the first check
+        req.headers["x-signature"] = "dummy";
+        
+        await signatureMiddleware(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: "Unsupported signature version" });
     });
 
-    it("should return error when version is not v1", () => {
-      const result = validateHeaders({
-        signature: "somesig",
-        version: "v2",
-        timestamp: Date.now().toString(),
-        nonce: "nonce-123",
-      });
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Unsupported signature version");
+    it("should reject expired request", async () => {
+        req.headers["x-signature"] = "dummy";
+        req.headers["x-timestamp"] = (Date.now() - 301000).toString(); // > 5 min
+        
+        await signatureMiddleware(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: "Request expired" });
     });
 
-    it("should return valid for all required headers", () => {
-      const result = validateHeaders({
-        signature: "somesig",
-        version: "v1",
-        timestamp: Date.now().toString(),
-        nonce: "nonce-123",
-      });
-      expect(result.valid).toBe(true);
-    });
-  });
-
-  describe("timestamp validation", () => {
-    const validateTimestamp = (timestamp, ttl = SIGNATURE_TTL_MS) => {
-      const now = Date.now();
-      if (Math.abs(now - Number(timestamp)) > ttl) {
-        return { valid: false, error: "Request expired" };
-      }
-      return { valid: true };
-    };
-
-    it("should reject expired timestamps", () => {
-      const oldTimestamp = Date.now() - SIGNATURE_TTL_MS - 1000;
-      const result = validateTimestamp(oldTimestamp.toString());
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("Request expired");
+    it("should reject replay detected", async () => {
+        req.headers["x-signature"] = "dummy";
+        mockRedis.get.mockResolvedValue("1"); // Already seen
+        
+        await signatureMiddleware(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: "Replay detected" });
     });
 
-    it("should accept valid timestamps", () => {
-      const result = validateTimestamp(Date.now().toString());
-      expect(result.valid).toBe(true);
+    it("should reject invalid signature", async () => {
+        mockRedis.get.mockResolvedValue(null);
+        req.headers["x-signature"] = "invalid_hex_string_1234567890abcdef";
+        
+        await signatureMiddleware(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: "Invalid signature" });
     });
 
-    it("should reject future timestamps beyond TTL", () => {
-      const futureTimestamp = Date.now() + SIGNATURE_TTL_MS + 1000;
-      const result = validateTimestamp(futureTimestamp.toString());
-      expect(result.valid).toBe(false);
-    });
-  });
-
-  describe("signature generation", () => {
-    const canonicalJson = (obj) => {
-      if (!obj || typeof obj !== "object") return "";
-      const sorted = Object.keys(obj)
-        .sort()
-        .reduce((acc, key) => {
-          acc[key] = obj[key];
-          return acc;
-        }, {});
-      return JSON.stringify(sorted);
-    };
-
-    const generateSignature = (method, url, timestamp, nonce, body, secret) => {
-      const payload = [method, url, timestamp, nonce, canonicalJson(body)].join(
-        "|"
-      );
-      return crypto.createHmac("sha256", secret).update(payload).digest("hex");
-    };
-
-    const verifySignature = (provided, expected) => {
-      const providedBuf = Buffer.from(provided, "hex");
-      const expectedBuf = Buffer.from(expected, "hex");
-
-      if (providedBuf.length !== expectedBuf.length) {
-        return false;
-      }
-      return crypto.timingSafeEqual(providedBuf, expectedBuf);
-    };
-
-    it("should generate consistent signatures for same input", () => {
-      const timestamp = "1234567890";
-      const nonce = "nonce-abc";
-      const body = { amount: 1000 };
-
-      const sig1 = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        body,
-        REQUEST_SIGNING_SECRET
-      );
-      const sig2 = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        body,
-        REQUEST_SIGNING_SECRET
-      );
-
-      expect(sig1).toBe(sig2);
+    it("should accept valid signature", async () => {
+        mockRedis.get.mockResolvedValue(null);
+        const sig = generateSignature(req, SECRET);
+        req.headers["x-signature"] = sig;
+        
+        await signatureMiddleware(req, res, next);
+        
+        expect(mockRedis.set).toHaveBeenCalledWith(
+            expect.stringContaining(req.headers["x-nonce"]),
+            "1",
+            "PX",
+            300000
+        );
+        expect(next).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalled();
     });
 
-    it("should generate different signatures for different bodies", () => {
-      const timestamp = "1234567890";
-      const nonce = "nonce-abc";
-
-      const sig1 = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        { amount: 1000 },
-        REQUEST_SIGNING_SECRET
-      );
-      const sig2 = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        { amount: 2000 },
-        REQUEST_SIGNING_SECRET
-      );
-
-      expect(sig1).not.toBe(sig2);
+    it("should sort keys in canonical json correctly", async () => {
+        // Body with unsorted keys
+        req.body = { z: 1, a: 2 };
+        const sig = generateSignature(req, SECRET); 
+        // generateSignature uses canonicalJson which sorts keys
+        req.headers["x-signature"] = sig;
+        
+        mockRedis.get.mockResolvedValue(null);
+        await signatureMiddleware(req, res, next);
+        
+        expect(next).toHaveBeenCalled();
     });
-
-    it("should verify matching signatures", () => {
-      const timestamp = Date.now().toString();
-      const nonce = "test-nonce";
-      const body = { walletId: "w1", amount: 1000 };
-
-      const signature = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        body,
-        REQUEST_SIGNING_SECRET
-      );
-      const expected = generateSignature(
-        "POST",
-        "/api/v1/transactions/authorize",
-        timestamp,
-        nonce,
-        body,
-        REQUEST_SIGNING_SECRET
-      );
-
-      expect(verifySignature(signature, expected)).toBe(true);
-    });
-
-    it("should reject non-matching signatures", () => {
-      const sig1 = crypto
-        .createHmac("sha256", REQUEST_SIGNING_SECRET)
-        .update("payload1")
-        .digest("hex");
-      const sig2 = crypto
-        .createHmac("sha256", REQUEST_SIGNING_SECRET)
-        .update("payload2")
-        .digest("hex");
-
-      expect(verifySignature(sig1, sig2)).toBe(false);
-    });
-  });
-
-  describe("replay protection logic", () => {
-    const checkReplay = (seenNonces, nonce) => {
-      if (seenNonces.has(nonce)) {
-        return { isReplay: true, error: "Replay detected" };
-      }
-      return { isReplay: false };
-    };
-
-    it("should detect replay when nonce exists", () => {
-      const seenNonces = new Set(["used-nonce"]);
-      const result = checkReplay(seenNonces, "used-nonce");
-      expect(result.isReplay).toBe(true);
-      expect(result.error).toBe("Replay detected");
-    });
-
-    it("should allow new nonces", () => {
-      const seenNonces = new Set(["other-nonce"]);
-      const result = checkReplay(seenNonces, "new-nonce");
-      expect(result.isReplay).toBe(false);
-    });
-  });
 });

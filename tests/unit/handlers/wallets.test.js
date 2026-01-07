@@ -1,4 +1,3 @@
-import { describe, it, expect } from "@jest/globals";
 
 /**
  * Wallet Handler Tests
