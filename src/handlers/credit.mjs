@@ -1,7 +1,37 @@
+/**
+ * @fileoverview Credit handler for adding funds to a wallet.
+ * Executes a direct credit transaction that immediately increases the wallet balance.
+ * Uses monetra for precise money arithmetic and creates corresponding ledger entries.
+ */
+
 import { prisma } from "../infra/prisma.mjs";
 import { v4 as uuid } from "uuid";
 import { money } from "monetra";
 
+/**
+ * Credit funds to a wallet.
+ * 
+ * Executes an atomic transaction that:
+ * 1. Validates wallet ownership and existence
+ * 2. Adds the specified amount to the wallet balance using precise money arithmetic
+ * 3. Creates a completed transaction record
+ * 4. Creates a credit ledger entry for audit trail
+ * 
+ * @async
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.walletId - ID of the wallet to credit
+ * @param {number} req.body.amount - Amount to credit (in minor units, e.g., cents)
+ * @param {string} req.body.referenceId - Unique reference ID for idempotency
+ * @param {Object} req.user - Authenticated user object (injected by auth middleware)
+ * @param {Object} req.user.account - User's account information
+ * @param {string} req.user.account.id - Account ID for ownership verification
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} JSON response with transaction and updated wallet or error
+ * @throws {400} BAD_REQUEST - Missing required fields
+ * @throws {404} NOT_FOUND - Wallet not found or doesn't belong to user
+ * @throws {500} INTERNAL_SERVER_ERROR - Database or system error
+ */
 export default async function credit(req, res) {
   const { walletId, amount, referenceId } = req.body;
 

@@ -1,3 +1,21 @@
+/**
+ * @fileoverview Main Express application entry point.
+ * 
+ * Configures and exports the Express application with:
+ * - CORS and security middleware (helmet, rate limiting)
+ * - Request logging and metrics collection
+ * - Health check endpoints (liveness, readiness, full health)
+ * - Authentication and authorization
+ * - Transaction and wallet API routes
+ * - Admin routes for system management
+ * - Error handling and graceful shutdown
+ * 
+ * The application is designed to be deployed in both serverless (AWS Lambda)
+ * and traditional server environments.
+ * 
+ * @module app
+ */
+
 import express from "express";
 import serverless from "serverless-http";
 import routes from "./routes.mjs";
@@ -13,6 +31,10 @@ import {
   readinessHandler,
 } from "./middleware/healthCheck.mjs";
 
+/**
+ * Express application instance.
+ * @type {express.Application}
+ */
 export const app = express();
 
 // Trust proxy for accurate IP detection behind load balancers

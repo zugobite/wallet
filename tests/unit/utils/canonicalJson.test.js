@@ -1,4 +1,4 @@
-import { canonicalJson } from "../../../src/utlis/canonicalJson.mjs";
+import { canonicalJson } from "../../../src/utils/canonicalJson.mjs";
 
 describe("canonicalJson", () => {
   describe("basic functionality", () => {

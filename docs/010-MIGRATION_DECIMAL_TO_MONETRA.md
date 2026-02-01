@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document outlines the migration from `decimal.js` to `monetra` v1.2.0 for handling financial calculations in the Wallet Transaction API.
+This document outlines the migration from `decimal.js` to `monetra` v2.2.1 for handling financial calculations in the Wallet Transaction API.
 
 ## Why Monetra?
 
-**monetra** is a currency-aware, integer-based money engine designed for financial correctness:
+**monetra** is a comprehensive financial framework that goes beyond simple money handling:
 
 - ❌ **No floating-point arithmetic**: All values stored in minor units (BigInt)
 - ❌ **No silent rounding**: Rounding must be explicit
@@ -16,6 +16,9 @@ This document outlines the migration from `decimal.js` to `monetra` v1.2.0 for h
 - ✅ **Smart Syntax**: `money()` helper for cleaner code
 - ✅ **Multi-Currency Wallets**: Built-in `MoneyBag` for managing portfolios
 - ✅ **Currency Conversion**: Robust `Converter` with exchange rate support
+- ✅ **Financial Mathematics**: Time-value-of-money (PMT, NPV, IRR), loan amortization
+- ✅ **Ledger System**: Append-only, double-entry accounting with hash chain verification
+- ✅ **Zero Dependencies**: No supply chain risks
 
 ## Migration Changes
 
@@ -31,12 +34,12 @@ This document outlines the migration from `decimal.js` to `monetra` v1.2.0 for h
 }
 ```
 
-**After (monetra v1.2.0):**
+**After (monetra v2.2.1):**
 
 ```json
 {
   "dependencies": {
-    "monetra": "~1.2.0"
+    "monetra": "^2.2.1"
   }
 }
 ```
@@ -134,52 +137,115 @@ const dbValue = newBalance.mul(100).toNumber();
 const dbValue = Number(newBalanceM.minor);
 ```
 
-## Available Features in v1.2.0
+## Available Features in v2.2.1
 
-### Global Helpers
+### Layer 1: Core Money & Currency
+
+#### Global Helpers
 
 - `money(amount, currency)` - Smart helper (numbers = minor units, strings = major units)
 - `getCurrency(code)` - Get currency metadata
-- `registerCurrency(currency)` - Register custom currency
+- `registerCurrency(currency)` - Register custom currency (supports up to 18 decimals for crypto)
 - `isCurrencyRegistered(code)` - Check if currency is registered
 
-### Core Money Operations
+#### Core Money Operations
 
 - `Money.fromMinor(amount, currency)` - Create from minor units (cents)
 - `Money.fromMajor(amount, currency)` - Create from major units (dollars)
 - `Money.zero(currency)` - Create zero value
+- `Money.fromCents(amount, currency)` - Alias for fromMinor (v2.1.0+)
+- `Money.fromDecimal(amount, currency)` - Create from decimal string (v2.1.0+)
+- `Money.clamp(min, max)` - Constrain value to range (v2.1.0+)
 
-### Arithmetic Methods
+#### Arithmetic Methods
 
 - `add(other)` - Add money
 - `subtract(other)` - Subtract money
 - `multiply(multiplier, options)` - Multiply (requires rounding if fractional)
+- `divide(divisor, options)` - Divide (requires rounding)
 - `allocate(ratios)` - Split money by ratios (e.g., [1, 1, 1])
 - `split(parts)` - Split into equal parts
 - `percentage(percent)` - Calculate percentage
 - `addPercent(percent)` - Add percentage (e.g., tax)
 - `subtractPercent(percent)` - Subtract percentage (e.g., discount)
 
-### Comparison Methods
+#### Comparison Methods
 
 - `lessThan(other)` - Check if less than
 - `greaterThan(other)` - Check if greater than
 - `equals(other)` - Check if equal
 - `isZero()` - Check if zero
 - `isNegative()` - Check if negative
+- `isPositive()` - Check if positive
 
-### Validation Helpers
+#### Validation Helpers
 
 - `assertNonNegative(money)` - Throw if negative
 - `assertSameCurrency(a, b)` - Throw if currencies differ
 
-### Properties
+#### Properties & Formatting
 
 - `.minor` - Get minor units as BigInt
 - `.currency` - Get currency object
 - `.format(options)` - Format as string with locale support
+- `.toDecimalString()` - Format as decimal string (v2.1.0+)
 
-### MoneyBag (Multi-Currency Portfolio)
+### Layer 2: Financial Mathematics
+
+#### Time Value of Money
+
+- `pmt(options)` - Calculate periodic payment (mortgage, loans)
+- `npv(rate, cashflows)` - Net Present Value
+- `irr(cashflows)` - Internal Rate of Return
+- `fv(options)` - Future Value
+- `pv(options)` - Present Value
+
+#### Loan Amortization
+
+- `loan(options)` - Generate full amortization schedule with principal/interest breakdown
+
+#### Interest Calculations
+
+- `compoundInterest(options)` - Compound interest with flexible compounding periods
+- `simpleInterest(options)` - Simple interest calculation
+
+#### Depreciation
+
+- `straightLineDepreciation(options)` - Straight-line depreciation schedule
+- `decliningBalanceDepreciation(options)` - Declining balance depreciation
+
+### Layer 3: Audit & Ledger
+
+#### Ledger System
+
+```javascript
+import { Ledger, money } from "monetra";
+
+const ledger = new Ledger("USD");
+
+// Double-entry bookkeeping
+ledger.record({
+  description: "Customer payment",
+  entries: [
+    { account: "cash", debit: money("100.00", "USD") },
+    { account: "revenue", credit: money("100.00", "USD") }
+  ]
+});
+
+// Cryptographic verification
+const isValid = ledger.verify(); // true
+```
+
+#### Verification & Compliance
+
+- Hash chain verification for tamper detection
+- Append-only transaction log
+- Balance reconciliation
+- Account tracking
+
+### Multi-Currency Support
+
+#### MoneyBag (Multi-Currency Portfolio)
 
 ```javascript
 import { MoneyBag, money } from "monetra";

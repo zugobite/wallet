@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import crypto from "crypto";
-import { canonicalJson } from "../../../src/utlis/canonicalJson.mjs";
+import { canonicalJson } from "../../../src/utils/canonicalJson.mjs";
 
 const { mockRedis } = vi.hoisted(() => ({
     mockRedis: {
