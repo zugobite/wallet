@@ -84,7 +84,7 @@ describe("Wallet API bootstrap", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("Wallet API");
-    expect(res.body.version).toBe("1.3.3");
+    expect(res.body.version).toBe("1.4.0");
     expect(res.body.endpoints.api).toBe("/api/v1");
   });
 

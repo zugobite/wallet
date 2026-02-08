@@ -22,6 +22,10 @@ vi.mock("../../../src/middleware/auth.mjs", () => ({
   default: vi.fn(),
 }));
 
+vi.mock("../../../src/middleware/rateLimit.mjs", () => ({
+  authLimiter: vi.fn(),
+}));
+
 describe("Auth Routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,8 +34,18 @@ describe("Auth Routes", () => {
   it("should configure auth routes", async () => {
     await import("../../../src/routes/auth.routes.mjs");
 
-    expect(mockRouter.post).toHaveBeenCalledWith("/register", expect.any(Function));
-    expect(mockRouter.post).toHaveBeenCalledWith("/login", expect.any(Function));
+    // Check public routes with rate limiting
+    // router.post("/register", authLimiter, register);
+    expect(mockRouter.post).toHaveBeenCalledWith(
+      "/register",
+      expect.any(Function), // authLimiter
+      expect.any(Function)  // register handler
+    );
+    expect(mockRouter.post).toHaveBeenCalledWith(
+      "/login",
+      expect.any(Function), // authLimiter
+      expect.any(Function)  // login handler
+    );
     
     // Check protected route
     // It uses auth middleware: router.get("/me", auth, me);

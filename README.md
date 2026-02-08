@@ -15,10 +15,15 @@ A secure, production-ready wallet transaction API with user authentication, two-
 - **Customer Wallet APIs** - Deposit, withdraw, view balance and transactions
 - **Admin Controls** - Freeze wallets, reverse transactions, platform oversight
 - **Two-Phase Debit Authorization** - Authorize → Debit/Reverse pattern for safe fund holds
+- **Rate Limiting** - Comprehensive rate limiting to protect against abuse
+- **Batch Transactions** - Atomic processing of multiple transactions
+- **Transaction History** - Advanced filtering and sorting capabilities
+- **Webhook Notifications** - Real-time event notifications for transactions
+- **Multi-Currency Support** - 10 major currencies with automatic conversion
 - **HMAC-SHA256 Request Signing** - Cryptographic request integrity verification
 - **Replay Protection** - Nonce-based protection against duplicate requests
 - **Idempotent Operations** - Safe retry handling with referenceId tracking
-- **Precision Math** - Financial calculations using `monetra` for accuracy
+- **Precision Math** - Financial calculations using `monetra` v2.3.0 for accuracy
 - **Full Audit Trail** - Complete ledger with balance snapshots
 - **Serverless Ready** - AWS Lambda compatible via serverless-http
 
