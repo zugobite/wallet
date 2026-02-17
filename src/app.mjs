@@ -31,6 +31,19 @@ import {
   readinessHandler,
 } from "./middleware/healthCheck.mjs";
 import { setupSwagger } from "./docs/swagger.mjs";
+import { generalLimiter } from "./middleware/rateLimit.mjs";
+import {
+  createWebhook,
+  getWebhooks,
+  deleteWebhook,
+} from "./handlers/webhooks.mjs";
+import {
+  getRates,
+  convert,
+  getSupportedCurrencies,
+} from "./handlers/currency.mjs";
+import auth from "./middleware/auth.mjs";
+
 
 /**
  * Express application instance.
@@ -80,6 +93,9 @@ app.use((req, res, next) => {
 // Body parsing
 app.use(express.json());
 
+// General rate limiting for all API endpoints
+app.use("/api/", generalLimiter);
+
 // Request logging with correlation IDs and metrics
 app.use(requestLogger);
 
@@ -111,7 +127,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     name: "Wallet API",
     description: "A secure, production-ready wallet transaction API with two-phase debit authorization",
-    version: "1.3.3",
+    version: "1.5.0",
     documentation: "/api/v1",
     endpoints: {
       api: "/api/v1",
@@ -221,6 +237,16 @@ app.use("/api/v1/admin", adminRoutes);
 
 // Mount transaction routes under /api/v1/transactions
 app.use("/api/v1/transactions", routes);
+
+// Mount webhook routes under /api/v1/webhooks
+app.post("/api/v1/webhooks", auth, createWebhook);
+app.get("/api/v1/webhooks", auth, getWebhooks);
+app.delete("/api/v1/webhooks/:id", auth, deleteWebhook);
+
+// Mount currency routes under /api/v1/currency
+app.get("/api/v1/currency/rates", getRates);
+app.post("/api/v1/currency/convert", convert);
+app.get("/api/v1/currency/supported", getSupportedCurrencies);
 
 // ============================================================================
 // Error Handling

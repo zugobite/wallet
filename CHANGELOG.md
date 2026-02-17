@@ -302,13 +302,20 @@ wallet/
 
 ### Planned
 
-- Rate limiting middleware
-- Batch transaction support
-- Transaction history endpoint
-- Webhook notifications for transaction events
-- Multi-currency support
+- Transaction analytics and reporting dashboard
+- Scheduled/recurring transactions
+- Multi-signature wallet support
+- Transaction fee management
+- Account statement generation (PDF/CSV)
 
 ---
 
+[1.4.0]: https://github.com/zugobite/wallet/releases/tag/v1.4.0
+[1.3.3]: https://github.com/zugobite/wallet/releases/tag/v1.3.3
+[1.3.2]: https://github.com/zugobite/wallet/releases/tag/v1.3.2
+[1.3.1]: https://github.com/zugobite/wallet/releases/tag/v1.3.1
+[1.3.0]: https://github.com/zugobite/wallet/releases/tag/v1.3.0
+[1.2.0]: https://github.com/zugobite/wallet/releases/tag/v1.2.0
+[1.1.0]: https://github.com/zugobite/wallet/releases/tag/v1.1.0
 [1.0.0]: https://github.com/zugobite/wallet/releases/tag/v1.0.0
-[Unreleased]: https://github.com/zugobite/wallet/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/zugobite/wallet/compare/v1.4.0...HEAD

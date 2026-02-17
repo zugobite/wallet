@@ -6,6 +6,7 @@ import * as txRepo from "../infra/repositories/transactions.repo.mjs";
 import * as ledgerRepo from "../infra/repositories/ledger.repo.mjs";
 import { assertWalletActive, canDebit } from "../domain/wallet.mjs";
 import { assertTransactionPending } from "../domain/transactions.mjs";
+import { notifyWebhooks, WebhookEvents } from "../infra/webhooks.mjs";
 
 /**
  * Custom error with status code
@@ -28,7 +29,7 @@ class ServiceError extends Error {
  * @returns {Promise<Object>} Transaction record
  */
 export async function authorize({ walletId, accountId, amount, referenceId }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const wallet = await walletRepo.findWalletByIdAndAccountTx(
       tx,
       walletId,
@@ -64,6 +65,17 @@ export async function authorize({ walletId, accountId, amount, referenceId }) {
 
     return { transaction, wallet };
   });
+
+  // Send webhook notification asynchronously
+  notifyWebhooks(WebhookEvents.TRANSACTION_CREATED, {
+    transactionId: result.transaction.id,
+    type: "authorize",
+    amount,
+    walletId,
+    status: "pending",
+  }, accountId).catch((err) => console.error("Webhook notification failed:", err));
+
+  return result;
 }
 
 /**
@@ -76,7 +88,7 @@ export async function authorize({ walletId, accountId, amount, referenceId }) {
  * @returns {Promise<Object>} Transaction and updated wallet
  */
 export async function debit({ walletId, accountId, amount, referenceId }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const wallet = await walletRepo.findWalletByIdAndAccountTx(
       tx,
       walletId,
@@ -135,6 +147,17 @@ export async function debit({ walletId, accountId, amount, referenceId }) {
 
     return { transaction, wallet: updatedWallet };
   });
+
+  // Send webhook notification asynchronously
+  notifyWebhooks(WebhookEvents.TRANSACTION_COMPLETED, {
+    transactionId: result.transaction.id,
+    type: "debit",
+    amount,
+    walletId,
+    status: "completed",
+  }, accountId).catch((err) => console.error("Webhook notification failed:", err));
+
+  return result;
 }
 
 /**
@@ -147,7 +170,7 @@ export async function debit({ walletId, accountId, amount, referenceId }) {
  * @returns {Promise<Object>} Transaction and updated wallet
  */
 export async function credit({ walletId, accountId, amount, referenceId }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const wallet = await walletRepo.findWalletByIdAndAccountTx(
       tx,
       walletId,
@@ -205,6 +228,17 @@ export async function credit({ walletId, accountId, amount, referenceId }) {
 
     return { transaction, wallet: updatedWallet };
   });
+
+  // Send webhook notification asynchronously
+  notifyWebhooks(WebhookEvents.TRANSACTION_COMPLETED, {
+    transactionId: result.transaction.id,
+    type: "credit",
+    amount,
+    walletId,
+    status: "completed",
+  }, accountId).catch((err) => console.error("Webhook notification failed:", err));
+
+  return result;
 }
 
 /**
@@ -215,7 +249,7 @@ export async function credit({ walletId, accountId, amount, referenceId }) {
  * @returns {Promise<Object>} Updated transaction
  */
 export async function reverse({ transactionId, accountId }) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const transaction = await txRepo.findByIdTx(tx, transactionId);
 
     if (!transaction) {
@@ -246,6 +280,17 @@ export async function reverse({ transactionId, accountId }) {
 
     return { transaction: updatedTx };
   });
+
+  // Send webhook notification asynchronously
+  notifyWebhooks(WebhookEvents.TRANSACTION_REVERSED, {
+    transactionId: result.transaction.id,
+    type: result.transaction.type,
+    amount: result.transaction.amount,
+    walletId: result.transaction.walletId,
+    status: "reversed",
+  }, accountId).catch((err) => console.error("Webhook notification failed:", err));
+
+  return result;
 }
 
 /**

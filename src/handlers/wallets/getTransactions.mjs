@@ -7,6 +7,12 @@ const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
   type: z.enum(["credit", "debit", "authorize", "reverse"]).optional(),
   status: z.enum(["pending", "completed", "reversed"]).optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  minAmount: z.coerce.number().int().optional(),
+  maxAmount: z.coerce.number().int().optional(),
+  sortBy: z.enum(["createdAt", "amount"]).optional().default("createdAt"),
+  sortOrder: z.enum(["asc", "desc"]).optional().default("desc"),
 });
 
 /**
@@ -28,7 +34,7 @@ export default async function getTransactions(req, res) {
       });
     }
 
-    const { page, limit, type, status } = validation.data;
+    const { page, limit, type, status, startDate, endDate, minAmount, maxAmount, sortBy, sortOrder } = validation.data;
 
     // Verify wallet belongs to user
     const wallet = await prisma.wallet.findFirst({
@@ -51,13 +57,23 @@ export default async function getTransactions(req, res) {
     const where = { walletId: id };
     if (type) where.type = type;
     if (status) where.status = status;
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (endDate) where.createdAt.lte = endDate;
+    }
+    if (minAmount !== undefined || maxAmount !== undefined) {
+      where.amount = {};
+      if (minAmount !== undefined) where.amount.gte = minAmount;
+      if (maxAmount !== undefined) where.amount.lte = maxAmount;
+    }
 
     // Get total count and transactions
     const [total, transactions] = await Promise.all([
       prisma.transaction.count({ where }),
       prisma.transaction.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
         include: {
