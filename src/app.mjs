@@ -30,6 +30,7 @@ import {
   livenessHandler,
   readinessHandler,
 } from "./middleware/healthCheck.mjs";
+import { setupSwagger } from "./docs/swagger.mjs";
 
 /**
  * Express application instance.
@@ -39,6 +40,9 @@ export const app = express();
 
 // Trust proxy for accurate IP detection behind load balancers
 app.set("trust proxy", true);
+
+// Initialize Swagger Documentation
+setupSwagger(app);
 
 // ============================================================================
 // CORS Middleware - Must be before body parsing and auth

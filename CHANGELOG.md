@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-02-17
+
+### Added
+
+- **OpenAPI Documentation** - Added interactive API documentation using Swagger UI.
+  - Endpoint: `/api-docs` provides a visual interface to explore and test API endpoints.
+  - Includes schemas for Requests, Responses, and Errors.
+  - Integrated `swagger-jsdoc` for generating the OpenAPI spec from code comments.
+
+## [1.4.0] - 2026-02-08
+
+### Added
+
+- **Rate Limiting Middleware** - Implemented comprehensive rate limiting for API protection.
+  - General API rate limiter: 100 requests per 15 minutes
+  - Authentication rate limiter: 5 attempts per 15 minutes (brute force protection)
+  - Transaction rate limiter: 10 transactions per minute
+  - All limiters include proper logging and custom error responses
+- **Batch Transaction Support** - Added `POST /api/v1/transactions/batch` endpoint for atomic multi-transaction processing.
+  - Process up to 100 transactions atomically (all succeed or all fail)
+  - Supports credit, debit, and authorize operations
+  - Automatic rollback on failure
+  - Batch-level idempotency with Redis caching
+- **Enhanced Transaction History** - Extended `GET /api/v1/wallets/:id/transactions` with advanced filtering.
+  - Date range filtering: `startDate`, `endDate`
+  - Amount range filtering: `minAmount`, `maxAmount`
+  - Flexible sorting: by `createdAt` or `amount`, ascending or descending
+  - Maintains existing pagination, type, and status filters
+- **Webhook Notifications** - Complete webhook system for real-time event notifications.
+  - Register webhook endpoints: `POST /api/v1/webhooks`
+  - List webhooks: `GET /api/v1/webhooks`
+  - Delete webhooks: `DELETE /api/v1/webhooks/:id`
+  - Automatic notifications for: `transaction.created`, `transaction.completed`, `transaction.reversed`, `transaction.failed`
+  - HMAC-SHA256 signature verification
+  - Exponential backoff retry (up to 3 attempts)
+  - Event filtering and subscription management
+- **Multi-Currency Support** - Full currency conversion and exchange rate management.
+  - Support for 10 major currencies: USD, EUR, GBP, JPY, AUD, CAD, CHF, CNY, SEK, NZD
+  - Exchange rates endpoint: `GET /api/v1/currency/rates`
+  - Currency conversion: `POST /api/v1/currency/convert`
+  - Supported currencies list: `GET /api/v1/currency/supported`
+  - Monetra Converter integration for precise calculations
+  - Redis caching for exchange rates (1-hour TTL)
+
+### Changed
+
+- **Upgraded to monetra v2.3.0** - Updated from v2.2.1 to v2.3.0 for latest features and improvements.
+  - All existing money operations remain fully compatible
+  - Enhanced Converter support for multi-currency transactions
+  - Improved financial calculation precision
+
 ## [1.3.3] - 2026-01-04
 
 ### Added

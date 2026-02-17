@@ -213,6 +213,23 @@ mysql -u root -p -e "SELECT 1;"
 | `P1001: Can't reach database`       | Check DATABASE_URL in .env, ensure MySQL is running                                          |
 | `assertNonNegative is not exported` | Update monetra to v2.1.0: `npm install monetra@^2.1.0`                                       |
 
+## Documentation
+
+Interactive API documentation is available via Swagger UI.
+
+### Accessing the Docs
+
+Start the server and visit:
+
+```
+http://localhost:3000/api-docs
+```
+
+This provides:
+- **Interactive Testing** - Execute requests directly from the browser
+- **Schema Definitions** - detailed models of inputs and outputs
+- **Authentication** - visual interface for Bearer token authorization
+
 ## API Endpoints
 
 ### Public Endpoints
